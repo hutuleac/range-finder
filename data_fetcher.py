@@ -1,4 +1,4 @@
-"""Pyonex data fetcher — Binance USD-M futures primary, Bybit linear fallback.
+"""Pyonex data fetcher — OKX swap primary, Bybit linear fallback, Binance USD-M last.
 
 Exposes:
     fetch_klines(symbol, timeframe, limit) -> list[list]  (12-col Binance shape)
@@ -28,6 +28,7 @@ log = logging.getLogger("pyonex.data")
 # ─────────────────────────────────────────────────────────────────────
 _binance: ccxt.Exchange | None = None
 _bybit: ccxt.Exchange | None = None
+_okx: ccxt.Exchange | None = None
 
 
 def _get_binance() -> ccxt.Exchange:
@@ -52,6 +53,22 @@ def _get_bybit() -> ccxt.Exchange:
             "options": {"defaultType": "linear"},
         })
     return _bybit
+
+
+def _get_okx() -> ccxt.Exchange:
+    global _okx
+    if _okx is None:
+        _okx = ccxt.okx({
+            "enableRateLimit": True,
+            "options": {"defaultType": "swap"},
+        })
+    return _okx
+
+
+def _to_okx_symbol(symbol: str) -> str:
+    """BTC/USDT -> BTC/USDT:USDT (OKX linear swap format)."""
+    base, quote = symbol.split("/")
+    return f"{base}/{quote}:{quote}"
 
 
 # symbol -> exchange name that last succeeded, so we skip repeated Binance misses
@@ -105,15 +122,35 @@ def _bybit_ohlcv(symbol: str, timeframe: str, limit: int) -> list[list] | None:
         return None
 
 
+def _okx_ohlcv(symbol: str, timeframe: str, limit: int) -> list[list] | None:
+    try:
+        ex = _get_okx()
+        ohlcv = ex.fetch_ohlcv(_to_okx_symbol(symbol), timeframe=timeframe, limit=limit)
+        if not ohlcv:
+            return None
+        return [
+            [row[0], row[1], row[2], row[3], row[4], row[5], 0, 0, 0, 0, 0, 0]
+            for row in ohlcv
+        ]
+    except Exception as e:  # noqa: BLE001
+        log.info("okx ohlcv %s: %s", symbol, e)
+        return None
+
+
 def fetch_klines(symbol: str, timeframe: str, limit: int) -> list[list]:
-    """Return Binance-shape klines. Tries cached source first, falls back across."""
-    key = f"{symbol}:{timeframe}"
-    order: list[Literal["binance", "bybit"]] = ["binance", "bybit"]
-    if _source_cache.get(symbol) == "bybit":
-        order = ["bybit", "binance"]
+    """Return Binance-shape klines. OKX primary, Bybit fallback, Binance last."""
+    cached = _source_cache.get(symbol)
+    order: list[str] = (
+        [cached, *(s for s in ["okx", "bybit", "binance"] if s != cached)]
+        if cached else ["okx", "bybit", "binance"]
+    )
+    fetchers = {
+        "binance": lambda: _binance_raw_klines(symbol, timeframe, limit),
+        "bybit": lambda: _bybit_ohlcv(symbol, timeframe, limit),
+        "okx": lambda: _okx_ohlcv(symbol, timeframe, limit),
+    }
     for src in order:
-        raw = _binance_raw_klines(symbol, timeframe, limit) if src == "binance" \
-              else _bybit_ohlcv(symbol, timeframe, limit)
+        raw = fetchers[src]()
         if raw:
             _source_cache[symbol] = src
             return raw
@@ -176,12 +213,36 @@ def _bybit_oi(symbol: str) -> OIData | None:
         return None
 
 
+def _okx_oi(symbol: str) -> OIData | None:
+    try:
+        ex = _get_okx()
+        hist = ex.fetch_open_interest_history(
+            _to_okx_symbol(symbol), "4h", limit=CFG["OI_LIMIT"]
+        )
+        if not hist or len(hist) < 2:
+            return None
+        oi_now = float(hist[-1]["openInterestAmount"])
+        oi_old = float(hist[0]["openInterestAmount"])
+        change = (oi_now - oi_old) / oi_old * 100 if oi_old > 0 else 0.0
+        return OIData(oiNow=oi_now, oiChange=change)
+    except Exception as e:  # noqa: BLE001
+        log.info("okx OI %s: %s", symbol, e)
+        return None
+
+
 def fetch_oi(symbol: str) -> OIData:
-    order: list[Literal["binance", "bybit"]] = ["binance", "bybit"]
-    if _source_cache.get(symbol) == "bybit":
-        order = ["bybit", "binance"]
+    cached = _source_cache.get(symbol)
+    order = (
+        [cached, *(s for s in ["okx", "bybit", "binance"] if s != cached)]
+        if cached else ["okx", "bybit", "binance"]
+    )
+    fetchers = {
+        "binance": lambda: _binance_oi(symbol),
+        "bybit": lambda: _bybit_oi(symbol),
+        "okx": lambda: _okx_oi(symbol),
+    }
     for src in order:
-        oi = _binance_oi(symbol) if src == "binance" else _bybit_oi(symbol)
+        oi = fetchers[src]()
         if oi is not None:
             return oi
     return OIData()
@@ -192,16 +253,21 @@ def fetch_oi(symbol: str) -> OIData:
 # ─────────────────────────────────────────────────────────────────────
 def fetch_funding(symbol: str) -> float:
     global _binance_blocked
-    sources = (("binance", _get_binance), ("bybit", _get_bybit))
-    for src, getter in sources:
+    cached = _source_cache.get(symbol)
+    order = (
+        [cached, *(s for s in ["okx", "bybit", "binance"] if s != cached)]
+        if cached else ["okx", "bybit", "binance"]
+    )
+    for src in order:
         if src == "binance" and _binance_blocked:
             continue
         try:
-            ex = getter()
-            r = ex.fetch_funding_rate(symbol)
+            ex = {"binance": _get_binance, "bybit": _get_bybit, "okx": _get_okx}[src]()
+            sym = _to_okx_symbol(symbol) if src == "okx" else symbol
+            r = ex.fetch_funding_rate(sym)
             rate = r.get("fundingRate")
             if rate is not None:
-                return float(rate) * 100.0  # to percent
+                return float(rate) * 100.0
         except Exception as e:  # noqa: BLE001
             if src == "binance" and _is_geo_blocked(e):
                 _binance_blocked = True
