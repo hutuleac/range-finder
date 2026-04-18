@@ -92,6 +92,7 @@ init_db()
 
 @st.cache_resource
 def _start_scheduler():
+    from datetime import timezone
     from apscheduler.schedulers.background import BackgroundScheduler
     from refresh_data import main as _main
 
@@ -102,8 +103,13 @@ def _start_scheduler():
             pass
 
     sched = BackgroundScheduler(daemon=True)
-    sched.add_job(_bg_refresh, "interval", seconds=CFG["REFRESH_INTERVAL_SEC"],
-                  id="bg_refresh", replace_existing=True)
+    sched.add_job(
+        _bg_refresh, "interval",
+        seconds=CFG["REFRESH_INTERVAL_SEC"],
+        id="bg_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),  # fire immediately on startup
+    )
     sched.start()
     return sched
 

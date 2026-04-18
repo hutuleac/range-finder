@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session
 
-DB_PATH = os.getenv("PYONEX_DB_PATH", "pyonex.db")
+DB_PATH = os.getenv("PYONEX_DB_PATH", os.path.join(tempfile.gettempdir(), "pyonex.db"))
 ENGINE_URL = f"sqlite:///{DB_PATH}"
 _engine = create_engine(ENGINE_URL, future=True)
 
