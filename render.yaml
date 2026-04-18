@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: pyonex-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PYONEX_DB_PATH
+        value: /var/data/pyonex.db
+      - key: PYONEX_LOG_LEVEL
+        value: INFO
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: BYBIT_API_KEY
+        sync: false
+      - key: BYBIT_API_SECRET
+        sync: false
+    disk:
+      name: pyonex-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  - type: cron
+    name: pyonex-refresh
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    schedule: "*/5 * * * *"
+    startCommand: python -m refresh_data
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PYONEX_DB_PATH
+        value: /var/data/pyonex.db
+      - key: PYONEX_LOG_LEVEL
+        value: INFO
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: BYBIT_API_KEY
+        sync: false
+      - key: BYBIT_API_SECRET
+        sync: false
+    disk:
+      name: pyonex-data
+      mountPath: /var/data
+      sizeGB: 1

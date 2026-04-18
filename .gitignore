@@ -1,0 +1,25 @@
+# JS source (not part of Python deploy)
+*.js
+Pyonex.txt
+
+.env
+.env.local
+*.env
+.claude/
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
