@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Pyonex v6.4** — a Streamlit + Plotly dashboard for evaluating cryptocurrency pairs for Pionex grid-bot trading.
+**Range Finder ⚡** — a Streamlit + Plotly dashboard for evaluating cryptocurrency pairs for Pionex grid-bot trading.
 
 The application pulls live Binance/Bybit market data, runs 15+ technical indicators (RSI, ATR, EMA, CVD, POC, ADX, Donchian, Squeeze, etc.), calculates grid-bot profitability, and surfaces actionable trading recommendations. All math is ported from the original JavaScript engine.
 
@@ -272,22 +272,3 @@ All indicators explained:
    still looks weak. Grid bots love this setup because the range stays tight while the under-the-surface pressure builds.
 
 
-   Chip consolidation:
-  - Old: two separate elements — "NEUTRAL" chip + plain "Bearish" text
-  - New: one chip "RANGING · Bearish" (yellow) or "RANGING · Bullish" (green) or "MILD TREND · Neutral" (grey) — regime +
-  structure in one read
-  - Small hint line below chips: RANGING = grid-friendly · Bullish/Bearish = 4H price structure
-
-  Spot Trade Setup card (appears between grid card and metrics grid):
-  - Header: Spot Trade Setup [LONG] or [SHORT] chip
-  - Entry zone: current price ± 0.3×ATR (tighter band to enter)
-  - SL: 1.5×ATR below price (Long) / above price (Bearish)
-  - TP1: 3.0×ATR, TP2: 5.25×ATR — with % distance and R/R ratio on each line
-  - Card glow color matches direction (green = Long, red = Short)
-  - Bearish 4H structure → Short setup; everything else → Long setup
-
-  For ETH at 2,306 with ~2% ATR (~46 USDT):
-  - Entry: 2,292 – 2,320
-  - SL: ~2,237 (−3%)
-  - TP1: ~2,444 (+5.9%) — R/R ~2:1
-  - TP2: ~2,548 (+10.5%) — R/R ~3.5:1

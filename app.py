@@ -9,7 +9,6 @@ import streamlit as st
 
 from config import CFG, DEFAULT_PAIRS, GRID_CONFIG, LEGENDS, SIG_TIPS
 from grid_calculator import (
-    calc_drawdown_scenario,
     calc_grid_capital_per_grid,
     calc_grid_profit_per_grid,
     calc_grid_stop_loss,
@@ -19,8 +18,8 @@ from refresh_data import refresh_one
 from trade_logger import all_latest, init_db, latest_metrics
 
 st.set_page_config(
-    page_title=f"Pyonex v{CFG['APP_VERSION']}",
-    page_icon="📊",
+    page_title="Range Finder",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -32,7 +31,7 @@ st.markdown("""
 .card, .chip, .mblock, .comp-row, .metric-big, .metric-sub,
 .mlabel, .mval { font-family: 'JetBrains Mono', monospace; }
 .metric-big  { font-size: 2.0rem; font-weight: 700; letter-spacing: -.5px; }
-.metric-sub  { font-size: .85rem; color: #8b93a7; margin-top: .15rem; }
+.metric-sub  { font-size: .85rem; color: #94a3b8; margin-top: .15rem; }
 
 /* ── Score colours ───────────────────────────────────────── */
 .score-strong { color: #22c55e; }
@@ -70,7 +69,7 @@ st.markdown("""
 .card-active-short { border-color: #7f1d1d; box-shadow: 0 0 27px rgba(239,68,68,.30); }
 .card-active-neut  { border-color: #78350f; box-shadow: 0 0 27px rgba(251,191,36,.22); }
 .card h3 { margin: 0 0 .35rem 0; font-size: 1.1rem; }
-.card small { color: #8b93a7; }
+.card small { color: #94a3b8; }
 
 /* ── Metric blocks (top row) ─────────────────────────────── */
 .mblock {
@@ -78,7 +77,7 @@ st.markdown("""
   background:#0f1117; border:1px solid #1e2533;
   text-align:center;
 }
-.mblock .mlabel { font-size:.72rem; color:#64748b; text-transform:uppercase; letter-spacing:.6px; }
+.mblock .mlabel { font-size:.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.6px; }
 .mblock .mval   { font-size:1.2rem; font-weight:700; margin-top:.1rem; }
 
 /* ── Score component bar ─────────────────────────────────── */
@@ -171,19 +170,19 @@ def render_trade_setup(price: float, atr_p: float, str4h: str) -> None:
 
     st.markdown(
         f"<div class='card {card_cls}' style='margin-top:-.25rem'>"
-        f"<div style='font-size:.72rem;color:#64748b;letter-spacing:.7px;text-transform:uppercase;margin-bottom:.3rem'>"
+        f"<div style='font-size:.72rem;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:.3rem'>"
         f"Spot Trade Setup &nbsp;{chip(dir_lbl, dir_kind)}</div>"
-        f"<div style='font-size:.82rem;color:#8b93a7;margin-bottom:.35rem'>"
-        f"Entry &nbsp;<b style='color:#e5e7eb'>{el:,.4f} – {eh:,.4f}</b>"
-        f"<span style='color:#64748b'> USDT</span></div>"
+        f"<div style='font-size:.82rem;color:#94a3b8;margin-bottom:.35rem'>"
+        f"Entry &nbsp;<b style='color:#f1f5f9'>{el:,.4f} – {eh:,.4f}</b>"
+        f"<span style='color:#94a3b8'> USDT</span></div>"
         f"<div style='display:flex;flex-direction:column;gap:.2rem;font-size:.84rem'>"
         f"<div>SL &nbsp;<b style='color:{sl_c}'>{sl:,.4f}</b>"
-        f"<span style='color:#64748b;font-size:.76rem'> ({sl_pct:+.1f}%)</span></div>"
+        f"<span style='color:#94a3b8;font-size:.76rem'> ({sl_pct:+.1f}%)</span></div>"
         f"<div>TP1 <b style='color:{tp_c}'>{tp1:,.4f}</b>"
-        f"<span style='color:#64748b;font-size:.76rem'> ({tp1_pct:+.1f}%)</span>"
+        f"<span style='color:#94a3b8;font-size:.76rem'> ({tp1_pct:+.1f}%)</span>"
         f"<span style='color:#94a3b8;font-size:.76rem'> · R/R 1:{rr1:.1f}</span></div>"
         f"<div>TP2 <b style='color:{tp_c}'>{tp2:,.4f}</b>"
-        f"<span style='color:#64748b;font-size:.76rem'> ({tp2_pct:+.1f}%)</span>"
+        f"<span style='color:#94a3b8;font-size:.76rem'> ({tp2_pct:+.1f}%)</span>"
         f"<span style='color:#94a3b8;font-size:.76rem'> · R/R 1:{rr2:.1f}</span></div>"
         f"</div></div>",
         unsafe_allow_html=True,
@@ -218,7 +217,7 @@ def comp_bar_color(ratio: float) -> str:
     return "#ef4444"
 
 
-def mblock(label: str, value: str, color: str = "#e5e7eb") -> str:
+def mblock(label: str, value: str, color: str = "#f1f5f9") -> str:
     return (
         f"<div class='mblock'>"
         f"<div class='mlabel'>{label}</div>"
@@ -316,7 +315,7 @@ def render_symbol(payload: dict, symbol: str) -> None:
     flow  = m.get("flow", 0.0)
     oi_ch = m.get("oiChange", 0.0)
 
-    bb_color   = "#22d3ee" if bb_lb == "squeeze" else "#ef4444" if bb_lb == "expanded" else "#e5e7eb"
+    bb_color   = "#22d3ee" if bb_lb == "squeeze" else "#ef4444" if bb_lb == "expanded" else "#f1f5f9"
     flow_color = "#22c55e" if flow > CFG["FLOW_STRONG"] else "#ef4444" if flow < -CFG["FLOW_STRONG"] else "#fbbf24"
     oi_color   = "#22c55e" if oi_ch > 0 else "#ef4444"
     str_color  = "#22c55e" if str4h == "Bullish" else "#ef4444" if str4h == "Bearish" else "#94a3b8"
@@ -352,10 +351,10 @@ def render_symbol(payload: dict, symbol: str) -> None:
     _via_color = "#22c55e" if via["viable"] else "#ef4444"
     _rec_html  = (
         f"<hr style='border:0;border-top:1px solid #2d3748;margin:.6rem 0'>"
-        f"<div style='font-size:.82rem;color:#8b93a7;margin-bottom:.4rem'>"
+        f"<div style='font-size:.82rem;color:#94a3b8;margin-bottom:.4rem'>"
         f"<b style='color:{_hdr_c}'>{_act}</b>"
-        f"<span style='color:#64748b'> · </span>"
-        f"<b style='color:#e5e7eb'>{capital:,.0f} USDT</b> capital"
+        f"<span style='color:#94a3b8'> · </span>"
+        f"<b style='color:#f1f5f9'>{capital:,.0f} USDT</b> capital"
         f"</div>"
         f"<div style='display:flex;gap:2rem;font-size:1rem;font-weight:600'>"
         f"<span>SL&nbsp;<span style='color:#ef4444'>{sl:,.4f}</span></span>"
@@ -364,114 +363,135 @@ def render_symbol(payload: dict, symbol: str) -> None:
         if via["viable"] else ""
     )
 
+    _sl_tp_html = (
+        f"<div style='display:flex;gap:2rem;font-size:.92rem;font-weight:600;margin-bottom:.25rem'>"
+        f"<span>SL&nbsp;<span style='color:#ef4444'>{sl:,.4f}</span></span>"
+        f"<span>TP&nbsp;<span style='color:#22c55e'>{tp:,.4f}</span></span>"
+        f"</div>"
+        if via["viable"] else ""
+    )
+
     st.markdown(
         f"<div class='card {_card_cls}'>"
-        # ── Section 1: score + chips + price ──
-        f"<div style='font-size:.7rem;color:#64748b;letter-spacing:.8px;text-transform:uppercase;margin-bottom:.35rem'>{symbol}</div>"
+        # ── Header: symbol + score + chips + price ──
+        f"<div style='font-size:.7rem;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:.35rem'>{symbol}</div>"
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.3rem;margin-bottom:.15rem'>"
         f"<span class='metric-big {cls}'>{score:.1f}</span>"
-        f"<span style='font-size:.9rem;color:#8b93a7'>&nbsp;/ 10&nbsp;{score_info['label']}</span>"
         f"</div>"
-        f"<div style='display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.15rem'>{ctx_chip_h} {sq_chip_h}</div>"
-        f"<div style='font-size:.68rem;color:#475569;margin-bottom:.35rem'>RANGING = grid-friendly &nbsp;·&nbsp; Bullish/Bearish = 4H price structure</div>"
-        f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.2rem'>"
-        f"<div style='font-size:.9rem;font-weight:600;color:#f8fafc'>{price:,.4f}"
-        f"<span style='font-size:.72rem;color:#64748b'> USDT</span></div>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.3rem'>{ctx_chip_h} {sq_chip_h}</div>"
+        f"<div style='font-size:.9rem;font-weight:600;color:#f8fafc;margin-bottom:.4rem'>{price:,.4f}"
+        f"<span style='font-size:.72rem;color:#94a3b8'> USDT</span></div>"
+        # ── Grid Setup block ──
+        f"<hr style='border:0;border-top:1px solid #2d3748;margin:.4rem 0 .35rem'>"
+        f"<div style='font-size:.65rem;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:.3rem'>Grid Setup</div>"
+        f"<div style='margin-bottom:.12rem'>"
+        f"<span style='color:#94a3b8;font-size:.82rem'>Range&nbsp;</span>"
+        f"<span style='color:{rng_color};font-weight:600;font-size:.88rem'>{rng['rangeLow']:,.4f}&nbsp;–&nbsp;{rng['rangeHigh']:,.4f}</span>"
         f"</div>"
-        f"<div style='margin-top:.4rem;font-size:.88rem'>"
-        f"<span style='color:#8b93a7'>Range&nbsp;</span>"
-        f"<span style='color:{rng_color};font-weight:600'>{rng['rangeLow']:,.4f}&nbsp;–&nbsp;{rng['rangeHigh']:,.4f}</span>"
-        f"</div>"
-        f"<div style='font-size:.78rem;color:#64748b;margin-top:.1rem'>"
+        f"<div style='font-size:.76rem;color:#94a3b8;margin-bottom:.3rem'>"
         f"{rng['rangeWidthPct']:.1f}%&nbsp;·&nbsp;{grid_count['recommended']}g&nbsp;·&nbsp;"
         f"{'Arith' if mode['mode'] == 'Arithmetic' else 'Geo'}&nbsp;·&nbsp;~{duration['label']}"
         f"</div>"
-        f"<div style='font-size:.75rem;color:#64748b;margin-top:.2rem'>{_html.escape(direction['reason'])}</div>"
-        # ── Section 2: viability + CVD + OI + Funding ──
-        f"<hr style='border:0;border-top:1px solid #2d3748;margin:.5rem 0'>"
-        f"<div style='font-size:.82rem;margin-bottom:.3rem'>"
+        f"<div style='font-size:.84rem;margin-bottom:.25rem'>"
+        f"<b style='color:{_hdr_c}'>{_act}</b>"
+        f"<span style='color:#94a3b8'>&nbsp;·&nbsp;{capital:,.0f} USDT capital</span>"
+        f"</div>"
+        + _sl_tp_html +
+        f"<div style='font-size:.80rem;margin-bottom:.15rem'>"
         f"<span style='color:{_via_color};font-weight:600'>{_via_icon}&nbsp;{_html.escape(via['reason'])}</span>{_warn_html}"
         f"</div>"
+        f"<div style='font-size:.74rem;color:#94a3b8;margin-bottom:.1rem'>{_html.escape(direction['reason'])}</div>"
+        # ── Market Signals ──
+        f"<hr style='border:0;border-top:1px solid #2d3748;margin:.5rem 0 .3rem'>"
         f"<div style='display:flex;gap:.5rem;flex-wrap:wrap;font-size:.85rem'>"
         f"{_cvd(cvd5,'5d')} {_cvd(cvd14,'14d')} {_cvd(cvd30,'30d')}"
-        f"<span style='color:#64748b'>OI <b style='color:{oi_color}'>{oi_ch:+.1f}%</b>"
+        f"<span style='color:#94a3b8'>OI <b style='color:{oi_color}'>{oi_ch:+.1f}%</b>"
         f" · Fund <b style='color:{fund_color}'>{fund:+.4f}%</b></span>"
         f"</div>"
-        # ── Section 3: recommendation ──
-        + _rec_html +
         f"</div>",
         unsafe_allow_html=True,
     )
 
     render_trade_setup(price, atr_p, str4h)
 
-    # ── Metrics — CSS grid, 3-col on mobile ────────────────────────
+    # ── Zone 1: Key signal pills ────────────────────────────────────
+    def sig_pill(label: str, value: str, color: str) -> str:
+        return (
+            f"<span style='display:inline-flex;align-items:center;gap:.3rem;"
+            f"padding:.3rem .7rem;border-radius:20px;font-size:.8rem;font-weight:600;"
+            f"background:{color}18;border:1px solid {color}44;color:{color}'>"
+            f"<span style='color:#94a3b8;font-weight:400;font-size:.72rem'>{label}</span>"
+            f"&thinsp;{value}</span>"
+        )
+
+    atr_c  = "#ef4444" if atr_p > 5 else "#fbbf24" if atr_p > 3 else "#94a3b8"
+    pills  = (
+        sig_pill("RSI", f"{rsi:.1f}", rsi_color(rsi))
+        + sig_pill("ATR", f"{atr_p:.2f}%", atr_c)
+        + sig_pill("BB BW", f"{bb_bw:.2f}%", bb_color)
+        + sig_pill("Flow", f"{flow:+.1f}%", flow_color)
+    )
     st.markdown(
-        "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.4rem;margin:.5rem 0'>"
-        + mblock("RSI 4H",   f"{rsi:.1f}",          rsi_color(rsi))
-        + mblock("ATR %",    f"{atr_p:.2f}%",       "#fbbf24" if atr_p > 3 else "#94a3b8")
-        + mblock("BB BW",    f"{bb_bw:.2f}%",       bb_color)
-        + mblock("Flow 24h",    f"{flow:+.1f}%",           flow_color)
-        + mblock("Capital/grid", f"{cap_per_grid:,.2f}",  "#94a3b8")
-        + mblock("Net/grid",  f"{profit['netPct']*100:.3f}%",
-                             "#22c55e" if profit["isViable"] else "#ef4444")
-        + "</div>",
+        f"<div style='display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0'>{pills}</div>",
         unsafe_allow_html=True,
     )
 
-    # ── Score bars + missing hints — single markdown call ──────────
-    bars = ""
+    # ── Zone 2: Score breakdown — slim rows, status text only ───────
+    bars = "<div style='width:100%;margin:.3rem 0'>"
     for comp in score_info["components"]:
-        ratio = comp["score"] / comp["max"] if comp["max"] else 0
-        bc    = comp_bar_color(ratio)
-        pct   = int(ratio * 100)
+        ratio    = comp["score"] / comp["max"] if comp["max"] else 0
+        bc       = comp_bar_color(ratio)
+        pct      = int(ratio * 100)
+        full     = ratio >= 1.0
+        label_c  = "#6b7280" if full else "#f1f5f9"
+        detail_c = "#6b7280" if full else "#cbd5e1"
         bars += (
-            f"<div class='comp-row'>"
-            f"<span style='width:110px;color:#94a3b8;font-size:.78rem'>{comp['label']}</span>"
-            f"<div class='comp-bar-bg'><div class='comp-bar' style='width:{pct}%;background:{bc}'></div></div>"
-            f"<span style='width:28px;text-align:right;color:{bc};font-weight:600;font-size:.78rem'>{comp['score']:.1f}</span>"
-            f"<span style='color:#64748b;font-size:.74rem'> /{comp['max']}</span>"
-            f"<span style='color:#64748b;font-size:.72rem;margin-left:.3rem'>{comp['detail']}</span>"
+            f"<div style='margin:.18rem 0'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap'>"
+            f"<span style='color:{label_c};font-size:.80rem'>{comp['label']}</span>"
+            f"<span style='color:{detail_c};font-size:.77rem'>{comp['detail']}</span>"
+            f"</div>"
+            f"<div style='height:3px;border-radius:2px;background:#1e2533;margin-top:.15rem;width:100%'>"
+            f"<div style='width:{pct}%;height:100%;border-radius:2px;background:{bc}'></div></div>"
             f"</div>"
         )
+    bars += "</div>"
     for r in score_info.get("recs", []):
-        bars += f"<div style='font-size:.75rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>"
+        bars += f"<div style='font-size:.74rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>"
     if bars:
         st.markdown(bars, unsafe_allow_html=True)
 
-
-    # ── FVG — CSS grid ─────────────────────────────────────────────
+    # ── Zone 3: FVGs — compact inline tags sorted by distance ───────
     fvg_list = m.get("fvgList", [])
     if fvg_list:
-        fvg_html = "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.4rem;margin:.5rem 0'>"
-        for g in fvg_list[:5]:
-            c    = "green" if g["type"] == "BULL" else "red"
-            dist = abs(price - g["mid"]) / price * 100 if price else 0
-            fvg_html += (
-                f"<div class='card' style='padding:.45rem .55rem;text-align:center'>"
-                f"{chip(g['type']+' FVG', c)}"
-                f"<div style='font-size:.72rem;color:#94a3b8;margin-top:.2rem'>"
-                f"{g['bottom']:,.4f}–{g['top']:,.4f}</div>"
-                f"<div style='font-size:.68rem;color:#64748b'>dist {dist:.1f}%</div>"
-                f"</div>"
+        sorted_fvgs = sorted(
+            fvg_list,
+            key=lambda g: abs(price - g["mid"]) / price if price else 0,
+        )
+        tags = ""
+        for g in sorted_fvgs:
+            dist    = abs(price - g["mid"]) / price * 100 if price else 0
+            is_bull = g["type"] == "BULL"
+            c       = "#22c55e" if is_bull else "#ef4444"
+            bg      = "#052e16" if is_bull else "#2a0f16"
+            arrow   = "↑" if is_bull else "↓"
+            tags += (
+                f"<span style='display:inline-flex;align-items:center;gap:.25rem;"
+                f"padding:.22rem .55rem;border-radius:6px;background:{bg};"
+                f"border:1px solid {c}44;font-size:.72rem;color:{c};white-space:nowrap'>"
+                f"{arrow}&thinsp;{g['bottom']:,.1f}–{g['top']:,.1f}"
+                f"<span style='color:#cbd5e1;font-size:.72rem'>&nbsp;{dist:.1f}%</span></span>"
             )
-        st.markdown(fvg_html + "</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='margin:.5rem 0'>"
+            "<div style='font-size:.70rem;color:#cbd5e1;letter-spacing:.7px;"
+            "text-transform:uppercase;margin-bottom:.25rem'>Fair Value Gaps</div>"
+            f"<div style='display:flex;flex-wrap:wrap;gap:.3rem'>{tags}</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
-    # ── Drawdown ───────────────────────────────────────────────────
-    crash_pct   = st.slider(f"Crash % · {symbol}", 5, 60, 20, 5, key=f"crash-{symbol}")
-    crash_price = price * (1 - crash_pct / 100)
-    dd          = calc_drawdown_scenario(capital, rng["rangeLow"], price, crash_price)
-    dd_pct      = dd["drawdownPct"] * 100
-    dd_color    = "#ef4444" if dd_pct > 40 else "#fbbf24" if dd_pct > 20 else "#22c55e"
-    st.markdown(
-        "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.4rem;margin:.3rem 0 .5rem'>"
-        + mblock("Coins held",  f"{dd['coinsHeld']:,.4f}",                    "#94a3b8")
-        + mblock("Value@crash", f"{dd['valueAtCrash']:,.2f}",                 "#fbbf24")
-        + mblock("Drawdown",    f"{dd['drawdownUSDT']:,.2f} ({dd_pct:.1f}%)", dd_color)
-        + "</div>",
-        unsafe_allow_html=True,
-    )
 
     # ── Copy-to-Pionex ─────────────────────────────────────────────
     if via["viable"]:

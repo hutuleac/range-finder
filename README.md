@@ -1,4 +1,4 @@
-# Pyonex v6.4 — Pionex Grid Bot Dashboard
+# Range Finder ⚡ — Pionex Grid Bot Dashboard
 
 Streamlit + Plotly dashboard that pulls live Binance/Bybit data, runs the exact indicator + grid math from the original JS engine (plus Donchian & squeeze add-ons), and recommends Pionex grid-bot configurations.
 
@@ -107,4 +107,4 @@ pyonex/
 
 ## Changelog
 
-- **v6.4** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Deployed on Streamlit Community Cloud.
+- **Range Finder ⚡** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Deployed on Streamlit Community Cloud.
