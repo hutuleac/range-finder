@@ -32,7 +32,7 @@ CFG: dict = {
     "DONCHIAN_BREAK_BUFFER_PCT": 0.25,
 
     # Squeeze (new vs JS — from Pyonex.txt)
-    "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 1.0},
+    "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 0.7},
 
     # Thresholds
     "RSI_OB": 70, "RSI_OS": 30,
@@ -55,26 +55,26 @@ CFG: dict = {
 
 GRID_CONFIG: dict = {
     "DEFAULT_CAPITAL": 300,
-    "FEE_PCT": 0.001,
+    "FEE_PCT": 0.0005,          # Pionex grid bot: 0.05% per side (buy + sell = 0.10% round trip)
     "TARGET_NET_PCT": 0.008,
     "MIN_NET_PCT": 0.006,
-    "ATR_MULTIPLIER_DEFAULT": 2.5,
+    "ATR_MULTIPLIER_DEFAULT": 3.0,  # wider ranges for aggressive crypto posture
     "GEOMETRIC_THRESHOLD_PCT": 20,
     "SL_BUFFERS": {"stable": 0.06, "moderate": 0.09, "volatile": 0.13},
     "TP_BUFFERS": {"stable": 0.04, "moderate": 0.05, "volatile": 0.07},
     "VIABILITY": {
         "ADX_IDEAL": 18,
-        "ADX_BLOCK": 22,
-        "RSI_BLOCK": 68,
-        "BB_MIN": 2.0,
-        "BEARISH_ADX_BLOCK": 18,
+        "ADX_BLOCK": 25,            # raised from 22 — allow mild trends (aggressive posture)
+        "RSI_BLOCK": 72,            # raised from 68 — less conservative RSI gate
+        "BB_MIN": 1.5,              # lowered from 2.0 — alts can have tighter bands
+        "BEARISH_ADX_BLOCK": 21,    # raised from 18 — allow moderate bearish momentum
         "ATR_WARN": 4.5,
-        "RSI_WARN_HIGH": 58,
+        "RSI_WARN_HIGH": 62,        # raised from 58 — fewer false warnings
         "RSI_WARN_LOW": 32,
     },
-    "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 1.0},
+    "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 0.7},   # tighter squeeze (was 1.0)
     "CVD_LATERAL": {"FULL_SCORE_BELOW": 0.15, "ZERO_SCORE_ABOVE": 0.30},
-    "DIRECTION": {"LONG_MIN_SCORE": 6.5, "SHORT_MAX_SCORE": 4.5},
+    "DIRECTION": {"LONG_MIN_SCORE": 6.0, "SHORT_MAX_SCORE": 4.5},  # LONG_MIN lowered from 6.5
 }
 
 # Default pairs user confirmed (USDT perps)
@@ -114,6 +114,6 @@ LEGENDS: list[tuple[str, str]] = [
     ("Squeeze", "BB bandwidth compressed + Donchian/ATR tight. Prime grid window — expect range-bound action."),
     (
         f"Score 0-10",
-        f"Grid Score >= {GRID_CONFIG['DIRECTION']['LONG_MIN_SCORE']} for Long Grid, < {GRID_CONFIG['DIRECTION']['SHORT_MAX_SCORE']} for Short. Components: ADX(3), BB(2), CVD lateral(1.5), POC(2), RSI(1), Funding(0.5). API: Binance primary, Bybit fallback.",
+        f"Grid Score >= {GRID_CONFIG['DIRECTION']['LONG_MIN_SCORE']} for Long Grid, >= {GRID_CONFIG['DIRECTION']['SHORT_MAX_SCORE']} for Short. Components: ADX(3), BB(2), CVD lateral(1.5), POC(2), RSI(1), Funding(0.5). Fee: 0.05%/side (Pionex). API: Binance primary, Bybit fallback.",
     ),
 ]

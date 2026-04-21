@@ -1,6 +1,7 @@
 """Pyonex Streamlit dashboard — Phase 1."""
 from __future__ import annotations
 
+import html as _html
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -27,6 +28,9 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* ── Base ─────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+.card, .chip, .mblock, .comp-row, .metric-big, .metric-sub,
+.mlabel, .mval { font-family: 'JetBrains Mono', monospace; }
 .metric-big  { font-size: 2.0rem; font-weight: 700; letter-spacing: -.5px; }
 .metric-sub  { font-size: .85rem; color: #8b93a7; margin-top: .15rem; }
 
@@ -46,8 +50,8 @@ st.markdown("""
 
 /* ── Chips ───────────────────────────────────────────────── */
 .chip {
-  display:inline-block; padding: 2px 10px; border-radius: 20px;
-  font-size: .78rem; font-weight: 600; letter-spacing: .3px;
+  display:inline-block; padding: 6px 14px; border-radius: 20px;
+  font-size: .82rem; font-weight: 600; letter-spacing: .3px;
 }
 .chip-green  { background:#052e16; color:#22c55e; border:1px solid #166534; }
 .chip-red    { background:#2a0f16; color:#ef4444; border:1px solid #7f1d1d; }
@@ -58,24 +62,24 @@ st.markdown("""
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card {
-  padding: 1rem 1.25rem; border-radius: 14px; border: 1px solid #2a2f3a;
+  padding: 1rem 1.25rem; border-radius: 14px; border: 2px solid #2a2f3a;
   background: linear-gradient(160deg,#12151c 0%,#0b0d12 100%);
   margin-bottom: .75rem;
 }
-.card-active-long  { border-color: #166534; box-shadow: 0 0 18px rgba(34,197,94,.20); }
-.card-active-short { border-color: #7f1d1d; box-shadow: 0 0 18px rgba(239,68,68,.20); }
-.card-active-neut  { border-color: #78350f; box-shadow: 0 0 18px rgba(251,191,36,.15); }
+.card-active-long  { border-color: #166534; box-shadow: 0 0 27px rgba(34,197,94,.30); }
+.card-active-short { border-color: #7f1d1d; box-shadow: 0 0 27px rgba(239,68,68,.30); }
+.card-active-neut  { border-color: #78350f; box-shadow: 0 0 27px rgba(251,191,36,.22); }
 .card h3 { margin: 0 0 .35rem 0; font-size: 1.1rem; }
 .card small { color: #8b93a7; }
 
 /* ── Metric blocks (top row) ─────────────────────────────── */
 .mblock {
-  padding:.7rem 1rem; border-radius:10px;
+  padding:.8rem 1rem; border-radius:12px; min-width:72px;
   background:#0f1117; border:1px solid #1e2533;
   text-align:center;
 }
 .mblock .mlabel { font-size:.72rem; color:#64748b; text-transform:uppercase; letter-spacing:.6px; }
-.mblock .mval   { font-size:1.35rem; font-weight:700; margin-top:.1rem; }
+.mblock .mval   { font-size:1.2rem; font-weight:700; margin-top:.1rem; }
 
 /* ── Score component bar ─────────────────────────────────── */
 .comp-row { display:flex; align-items:center; gap:.5rem; margin:.2rem 0; font-size:.82rem; }
@@ -91,7 +95,6 @@ init_db()
 
 @st.cache_resource
 def _start_scheduler():
-    from datetime import timezone
     from apscheduler.schedulers.background import BackgroundScheduler
     from refresh_data import main as _main
 
@@ -132,20 +135,59 @@ def score_cls(score: float) -> str:
 
 
 def score_chip(score: float, label: str) -> str:
-    kind = "green" if score >= 8 else "green" if score >= 6 else "yellow" if score >= 4 else "red"
-    if score >= 6:
-        kind = "green"
-    elif score >= 4:
-        kind = "yellow"
-    else:
-        kind = "red"
+    kind = "green" if score >= 6 else "yellow" if score >= 4 else "red"
     return chip(f"{score:.1f} {label}", kind)
 
 
-def direction_chip(direction: str) -> str:
-    m = {"Long": ("green", "LONG GRID"), "Short": ("red", "SHORT GRID"), "Neutral": ("yellow", "NEUTRAL GRID")}
-    kind, label = m.get(direction, ("grey", direction))
-    return chip(label, kind)
+def context_chip(structure: str, adx: float) -> str:
+    regime = "TRENDING" if adx > 25 else "MILD TREND" if adx > 20 else "RANGING"
+    kind   = "green" if structure == "Bullish" else "yellow" if structure == "Bearish" else "grey"
+    return chip(f"{regime} · {structure}", kind)
+
+
+def render_trade_setup(price: float, atr_p: float, str4h: str) -> None:
+    """Spot directional trade card — entry zone, SL, TP1, TP2, R/R."""
+    if price <= 0 or atr_p <= 0:
+        return
+    atr_abs  = price * (atr_p / 100.0)
+    is_long  = str4h != "Bearish"
+    sign     = 1 if is_long else -1
+    el       = price - atr_abs * 0.3
+    eh       = price + atr_abs * 0.3
+    sl       = price - sign * atr_abs * CFG["SL_ATR_MULT"]
+    tp1      = price + sign * atr_abs * CFG["TP1_ATR_MULT"]
+    tp2      = price + sign * atr_abs * CFG["TP2_ATR_MULT"]
+    rr1      = abs(tp1 - price) / max(abs(sl - price), 1e-9)
+    rr2      = abs(tp2 - price) / max(abs(sl - price), 1e-9)
+    sl_pct   = (sl - price) / price * 100
+    tp1_pct  = (tp1 - price) / price * 100
+    tp2_pct  = (tp2 - price) / price * 100
+
+    dir_lbl  = "LONG" if is_long else "SHORT"
+    dir_kind = "green" if is_long else "red"
+    card_cls = "card-active-long" if is_long else "card-active-short"
+    sl_c     = "#ef4444"
+    tp_c     = "#22c55e"
+
+    st.markdown(
+        f"<div class='card {card_cls}' style='margin-top:-.25rem'>"
+        f"<div style='font-size:.72rem;color:#64748b;letter-spacing:.7px;text-transform:uppercase;margin-bottom:.3rem'>"
+        f"Spot Trade Setup &nbsp;{chip(dir_lbl, dir_kind)}</div>"
+        f"<div style='font-size:.82rem;color:#8b93a7;margin-bottom:.35rem'>"
+        f"Entry &nbsp;<b style='color:#e5e7eb'>{el:,.4f} – {eh:,.4f}</b>"
+        f"<span style='color:#64748b'> USDT</span></div>"
+        f"<div style='display:flex;flex-direction:column;gap:.2rem;font-size:.84rem'>"
+        f"<div>SL &nbsp;<b style='color:{sl_c}'>{sl:,.4f}</b>"
+        f"<span style='color:#64748b;font-size:.76rem'> ({sl_pct:+.1f}%)</span></div>"
+        f"<div>TP1 <b style='color:{tp_c}'>{tp1:,.4f}</b>"
+        f"<span style='color:#64748b;font-size:.76rem'> ({tp1_pct:+.1f}%)</span>"
+        f"<span style='color:#94a3b8;font-size:.76rem'> · R/R 1:{rr1:.1f}</span></div>"
+        f"<div>TP2 <b style='color:{tp_c}'>{tp2:,.4f}</b>"
+        f"<span style='color:#64748b;font-size:.76rem'> ({tp2_pct:+.1f}%)</span>"
+        f"<span style='color:#94a3b8;font-size:.76rem'> · R/R 1:{rr2:.1f}</span></div>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def struct_chip(s: str) -> str:
@@ -189,8 +231,7 @@ def mblock(label: str, value: str, color: str = "#e5e7eb") -> str:
 #  Sidebar
 # ─────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title(f"Pyonex v{CFG['APP_VERSION']}")
-    st.caption("Grid-bot scout for Pionex — OKX/Bybit data")
+
 
     selected = st.multiselect(
         "Watched pairs", DEFAULT_PAIRS, default=DEFAULT_PAIRS,
@@ -221,8 +262,9 @@ with st.sidebar:
     rows = all_latest()
     last_ts = max((r.updated_at for r in rows), default=None)
     if last_ts:
-        delta = (datetime.utcnow() - last_ts.replace(tzinfo=None)).total_seconds()
-        age_color = "green" if delta < 400 else "orange" if delta < 1400 else "red"
+        delta = (datetime.now(timezone.utc) - last_ts.astimezone(timezone.utc)).total_seconds()
+        _CACHE_FRESH_S, _CACHE_STALE_S = 400, 1400
+        age_color = "green" if delta < _CACHE_FRESH_S else "orange" if delta < _CACHE_STALE_S else "red"
         st.markdown(
             f"Cache age: <span style='color:{age_color};font-weight:600'>{int(delta)}s</span>"
             f" · rows: {len(rows)}",
@@ -282,8 +324,7 @@ def render_symbol(payload: dict, symbol: str) -> None:
     fund_color = "#fbbf24" if abs(fund) > 0.05 else "#22c55e"
 
     cls        = score_cls(score)
-    dir_chip_h = direction_chip(direction["type"])
-    via_chip_h = chip("VIABLE", "green") if via["viable"] else chip("BLOCKED", "red")
+    ctx_chip_h = context_chip(str4h, adx_v)
     sq_chip_h  = chip("SQUEEZE", "cyan") if sq else ""
 
     sl           = calc_grid_stop_loss(rng["rangeLow"], prof_name)
@@ -294,46 +335,85 @@ def render_symbol(payload: dict, symbol: str) -> None:
     )
     cap_per_grid = calc_grid_capital_per_grid(capital, grid_count["recommended"])
 
-    # ── Header card ────────────────────────────────────────────────
+    # ── Master card (score + viability + recommendation) ──────────
+    _act     = direction["type"]
+    _hdr_c   = "#22c55e" if _act == "Long" else "#ef4444" if _act == "Short" else "#fbbf24"
+    _card_cls = (("card-active-long" if _act == "Long"
+                  else "card-active-short" if _act == "Short" else "card-active-neut")
+                 if via["viable"] else "")
+    _warn_html = (f" &nbsp;<span style='color:#fbbf24'>{via['warning']}</span>"
+                  if via.get("warning") else "")
+
+    def _cvd(v: float, tf: str) -> str:
+        c = "#22c55e" if v > 0 else "#ef4444"
+        return f"<span style='color:{c};font-weight:600'>{tf} {'ACC' if v > 0 else 'DIS'}</span>"
+
+    _via_icon  = "✓" if via["viable"] else "✗"
+    _via_color = "#22c55e" if via["viable"] else "#ef4444"
+    _rec_html  = (
+        f"<hr style='border:0;border-top:1px solid #2d3748;margin:.6rem 0'>"
+        f"<div style='font-size:.82rem;color:#8b93a7;margin-bottom:.4rem'>"
+        f"<b style='color:{_hdr_c}'>{_act}</b>"
+        f"<span style='color:#64748b'> · </span>"
+        f"<b style='color:#e5e7eb'>{capital:,.0f} USDT</b> capital"
+        f"</div>"
+        f"<div style='display:flex;gap:2rem;font-size:1rem;font-weight:600'>"
+        f"<span>SL&nbsp;<span style='color:#ef4444'>{sl:,.4f}</span></span>"
+        f"<span>TP&nbsp;<span style='color:#22c55e'>{tp:,.4f}</span></span>"
+        f"</div>"
+        if via["viable"] else ""
+    )
+
     st.markdown(
-        f"<div class='card'>"
+        f"<div class='card {_card_cls}'>"
+        # ── Section 1: score + chips + price ──
         f"<div style='font-size:.7rem;color:#64748b;letter-spacing:.8px;text-transform:uppercase;margin-bottom:.35rem'>{symbol}</div>"
-        f"<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem'>"
-        f"<div>"
+        f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.3rem;margin-bottom:.15rem'>"
         f"<span class='metric-big {cls}'>{score:.1f}</span>"
-        f"<span style='font-size:.9rem;color:#8b93a7'> / 10 &nbsp;{score_info['label']}</span>"
-        f"<div style='margin:.3rem 0;display:flex;flex-wrap:wrap;gap:.3rem'>"
-        f"{dir_chip_h} {via_chip_h} {sq_chip_h}"
+        f"<span style='font-size:.9rem;color:#8b93a7'>&nbsp;/ 10&nbsp;{score_info['label']}</span>"
         f"</div>"
-        f"</div>"
-        f"<div style='text-align:right'>"
-        f"<div style='font-size:1.05rem;font-weight:600;color:#f8fafc'>{price:,.4f}"
+        f"<div style='display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.15rem'>{ctx_chip_h} {sq_chip_h}</div>"
+        f"<div style='font-size:.68rem;color:#475569;margin-bottom:.35rem'>RANGING = grid-friendly &nbsp;·&nbsp; Bullish/Bearish = 4H price structure</div>"
+        f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.2rem'>"
+        f"<div style='font-size:.9rem;font-weight:600;color:#f8fafc'>{price:,.4f}"
         f"<span style='font-size:.72rem;color:#64748b'> USDT</span></div>"
-        f"<div style='font-size:.8rem;color:{str_color};margin-top:.2rem'>Struct: {str4h}</div>"
         f"</div>"
+        f"<div style='margin-top:.4rem;font-size:.88rem'>"
+        f"<span style='color:#8b93a7'>Range&nbsp;</span>"
+        f"<span style='color:{rng_color};font-weight:600'>{rng['rangeLow']:,.4f}&nbsp;–&nbsp;{rng['rangeHigh']:,.4f}</span>"
         f"</div>"
-        f"<div style='margin-top:.45rem;font-size:.84rem'>"
-        f"<span style='color:#8b93a7'>Range </span>"
-        f"<span style='color:{rng_color};font-weight:600'>{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</span>"
-        f"<span style='color:#64748b'> &nbsp;{rng['rangeWidthPct']:.1f}% · {grid_count['recommended']} grids"
-        f" · {mode['mode']} · ~{duration['label']}</span>"
+        f"<div style='font-size:.78rem;color:#64748b;margin-top:.1rem'>"
+        f"{rng['rangeWidthPct']:.1f}%&nbsp;·&nbsp;{grid_count['recommended']}g&nbsp;·&nbsp;"
+        f"{'Arith' if mode['mode'] == 'Arithmetic' else 'Geo'}&nbsp;·&nbsp;~{duration['label']}"
         f"</div>"
-        f"<div style='font-size:.75rem;color:#64748b;margin-top:.2rem'>{direction['reason']}</div>"
+        f"<div style='font-size:.75rem;color:#64748b;margin-top:.2rem'>{_html.escape(direction['reason'])}</div>"
+        # ── Section 2: viability + CVD + OI + Funding ──
+        f"<hr style='border:0;border-top:1px solid #2d3748;margin:.5rem 0'>"
+        f"<div style='font-size:.82rem;margin-bottom:.3rem'>"
+        f"<span style='color:{_via_color};font-weight:600'>{_via_icon}&nbsp;{_html.escape(via['reason'])}</span>{_warn_html}"
+        f"</div>"
+        f"<div style='display:flex;gap:.5rem;flex-wrap:wrap;font-size:.85rem'>"
+        f"{_cvd(cvd5,'5d')} {_cvd(cvd14,'14d')} {_cvd(cvd30,'30d')}"
+        f"<span style='color:#64748b'>OI <b style='color:{oi_color}'>{oi_ch:+.1f}%</b>"
+        f" · Fund <b style='color:{fund_color}'>{fund:+.4f}%</b></span>"
+        f"</div>"
+        # ── Section 3: recommendation ──
+        + _rec_html +
         f"</div>",
         unsafe_allow_html=True,
     )
+
+    render_trade_setup(price, atr_p, str4h)
 
     # ── Metrics — CSS grid, 3-col on mobile ────────────────────────
     st.markdown(
         "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.4rem;margin:.5rem 0'>"
         + mblock("RSI 4H",   f"{rsi:.1f}",          rsi_color(rsi))
         + mblock("ATR %",    f"{atr_p:.2f}%",       "#fbbf24" if atr_p > 3 else "#94a3b8")
-        + mblock("ADX",      f"{adx_v:.1f}",        adx_color(adx_v))
         + mblock("BB BW",    f"{bb_bw:.2f}%",       bb_color)
-        + mblock("Flow 24h", f"{flow:+.1f}%",       flow_color)
-        + mblock("OI 7d",    f"{oi_ch:+.1f}%",      oi_color)
-        + mblock("Funding",  f"{fund:+.4f}%",       fund_color)
-        + mblock("Net/grid", f"{profit['netPct']*100:.3f}%",
+        + mblock("Flow 24h",    f"{flow:+.1f}%",           flow_color)
+        + mblock("Capital/grid", f"{cap_per_grid:,.2f}",  "#94a3b8")
+        + mblock("Net/grid",  f"{profit['netPct']*100:.3f}%",
                              "#22c55e" if profit["isViable"] else "#ef4444")
         + "</div>",
         unsafe_allow_html=True,
@@ -359,23 +439,6 @@ def render_symbol(payload: dict, symbol: str) -> None:
     if bars:
         st.markdown(bars, unsafe_allow_html=True)
 
-    # ── Viability + CVD ────────────────────────────────────────────
-    def cvd_badge(v: float, tf: str) -> str:
-        c = "#22c55e" if v > 0 else "#ef4444"
-        return f"<span style='color:{c};font-weight:600'>{tf} {'ACC' if v > 0 else 'DIS'}</span>"
-
-    warn_html = (f" &nbsp;<span style='color:#fbbf24'>{via['warning']}</span>"
-                 if via.get("warning") else "")
-    st.markdown(
-        f"<div class='card' style='margin-top:.5rem'>"
-        f"<div style='font-size:.82rem;margin-bottom:.3rem'>{via_chip_h} {via['reason']}{warn_html}</div>"
-        f"<div style='display:flex;gap:.75rem;flex-wrap:wrap;font-size:.87rem'>"
-        f"{cvd_badge(cvd5,'5d')} {cvd_badge(cvd14,'14d')} {cvd_badge(cvd30,'30d')}"
-        f"<span style='color:#64748b'>OI <b style='color:{oi_color}'>{oi_ch:+.1f}%</b>"
-        f" · Fund <b style='color:{fund_color}'>{fund:+.4f}%</b></span>"
-        f"</div></div>",
-        unsafe_allow_html=True,
-    )
 
     # ── FVG — CSS grid ─────────────────────────────────────────────
     fvg_list = m.get("fvgList", [])
@@ -394,15 +457,6 @@ def render_symbol(payload: dict, symbol: str) -> None:
             )
         st.markdown(fvg_html + "</div>", unsafe_allow_html=True)
 
-    # ── SL / TP / Capital — CSS grid ───────────────────────────────
-    st.markdown(
-        "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.4rem;margin:.5rem 0'>"
-        + mblock("Capital/grid",      f"{cap_per_grid:,.2f}", "#94a3b8")
-        + mblock(f"SL ({prof_name})", f"{sl:,.4f}",           "#ef4444")
-        + mblock(f"TP ({prof_name})", f"{tp:,.4f}",           "#22c55e")
-        + "</div>",
-        unsafe_allow_html=True,
-    )
 
     # ── Drawdown ───────────────────────────────────────────────────
     crash_pct   = st.slider(f"Crash % · {symbol}", 5, 60, 20, 5, key=f"crash-{symbol}")
@@ -419,46 +473,21 @@ def render_symbol(payload: dict, symbol: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Recommended action ─────────────────────────────────────────
+    # ── Copy-to-Pionex ─────────────────────────────────────────────
     if via["viable"]:
-        act      = direction["type"]
-        hdr_c    = "#22c55e" if act == "Long" else "#ef4444" if act == "Short" else "#fbbf24"
-        card_cls = ("card-active-long" if act == "Long"
-                    else "card-active-short" if act == "Short" else "card-active-neut")
-        st.markdown(
-            f"<div class='card {card_cls}'>"
-            f"<div style='margin-bottom:.3rem'>"
-            f"<b style='color:{hdr_c}'>{act} Grid</b> &nbsp;{chip('RECOMMENDED','green')}</div>"
-            f"<div style='font-size:.84rem;color:#8b93a7'>"
-            f"Range <b style='color:{hdr_c}'>{rng['rangeLow']:,.4f} – {rng['rangeHigh']:,.4f}</b>"
-            f" &nbsp;Grids <b style='color:#e5e7eb'>{grid_count['recommended']}</b> · {mode['mode']}<br>"
-            f"Capital <b style='color:#e5e7eb'>{capital:,.0f} USDT</b>"
-            f" &nbsp;SL <span style='color:#ef4444'>{sl:,.4f}</span>"
-            f" &nbsp;TP <span style='color:#22c55e'>{tp:,.4f}</span>"
-            f"</div></div>",
-            unsafe_allow_html=True,
-        )
         st.code(
-            f"{symbol} | {act} Grid | {rng['rangeLow']:.4f}-{rng['rangeHigh']:.4f} | "
+            f"{symbol} | {_act} Grid | {rng['rangeLow']:.4f}-{rng['rangeHigh']:.4f} | "
             f"{grid_count['recommended']} grids | {mode['mode']} | "
             f"{capital:.0f} USDT | SL {sl:.4f} | TP {tp:.4f}",
             language="text",
         )
-    else:
-        st.markdown(
-            f"<div style='font-size:.84rem;color:#64748b;padding:.4rem 0'>"
-            f"No grid recommended — {via['reason']}</div>",
-            unsafe_allow_html=True,
-        )
 
-    st.markdown("---")
+    st.divider()
 
 
 # ─────────────────────────────────────────────────────────────────────
 #  Main
 # ─────────────────────────────────────────────────────────────────────
-st.title(f"Pyonex v{CFG['APP_VERSION']} — Pionex grid scout")
-
 if not selected:
     st.info("Pick at least one pair from the sidebar.")
     st.stop()
@@ -532,7 +561,7 @@ styled = (
     .set_properties(**{"text-align": "center"})
 )
 # ── Per-symbol cards — swipe down ─────────────────────────────────
-for sym in payloads:
+for sym in sorted(payloads, key=lambda s: payloads[s]["scoreInfo"]["score"], reverse=True):
     render_symbol(payloads[sym], sym)
 
 # ── Summary table — desktop only (collapsed by default) ────────────

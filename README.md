@@ -21,7 +21,7 @@ Streamlit + Plotly dashboard that pulls live Binance/Bybit data, runs the exact 
 | `trade_logger.py` | SQLAlchemy models `MetricsCache` + `Trade` (Phase 2) |
 | `refresh_data.py` | Cron entry — fills MetricsCache for every watched pair |
 | `app.py` | Streamlit UI — tabs, cards, summary table, charts |
-| `render.yaml` | Render blueprint (web + cron + 1 GB disk) |
+| `.streamlit/secrets.toml` | Local secrets (gitignored); mirrors Streamlit Cloud secrets UI |
 | `phases/` | Empty Phase 2/3/4 stubs |
 
 ## Local run
@@ -52,11 +52,14 @@ pyonex/
 ├─ data_fetcher.py
 ├─ trade_logger.py
 ├─ refresh_data.py
-├─ render.yaml
 ├─ requirements.txt
+├─ runtime.txt
 ├─ README.md
 ├─ .env.example
 ├─ .gitignore
+├─ .streamlit/
+│   ├─ config.toml
+│   └─ secrets.toml      ← gitignored; add locally only
 └─ phases/
     ├─ phase2_trade_logger.py
     ├─ phase3_telegram.py
@@ -65,19 +68,24 @@ pyonex/
 
 `.gitignore` already excludes `.env`, `*.db`, `.claude/`, caches.
 
-## Render.com deploy
+## Streamlit Community Cloud deploy
 
-1. Push repo to GitHub.
-2. On Render → **New → Blueprint** → connect the repo. `render.yaml` creates:
-   - `pyonex-dashboard` — web service running Streamlit on `$PORT`.
-   - `pyonex-refresh` — cron job running `python -m refresh_data` every 5 minutes.
-   - `pyonex-data` — 1 GB persistent disk shared by both (SQLite at `/var/data/pyonex.db`).
-3. Set env vars on both services (only `BINANCE_API_*` / `BYBIT_API_*` if you want higher rate limits — public endpoints work otherwise).
-4. Trigger the cron once manually, then open the web service URL.
+1. Push repo to GitHub (public or private).
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → pick repo, branch `main`, main file `app.py`.
+3. Under **Advanced settings → Secrets**, paste your secrets (same format as `.streamlit/secrets.toml`):
+   ```toml
+   BINANCE_API_KEY = ""
+   BINANCE_API_SECRET = ""
+   BYBIT_API_KEY = ""
+   BYBIT_API_SECRET = ""
+   PYONEX_LOG_LEVEL = "INFO"
+   ```
+   Public endpoints work without API keys — only set them for higher rate limits.
+4. Click **Deploy**. Streamlit Cloud installs `requirements.txt` and starts the app.
 
-### Upgrade to Postgres later
+**SQLite note:** Streamlit Cloud has no persistent disk. The SQLite cache (`pyonex.db`) lives in the system temp dir and resets on each redeployment. Data refreshes automatically on each page load via `refresh_one()` — no separate cron needed.
 
-Drop `PYONEX_DB_PATH`, set `DATABASE_URL=postgres://…`, and update `trade_logger.py`'s `ENGINE_URL`. Everything else stays the same.
+**Secrets in code:** `app.py` / `trade_logger.py` read secrets via `os.getenv()`, which Streamlit Cloud populates from the secrets UI. No code changes required.
 
 ## Environment variables
 
@@ -92,11 +100,11 @@ Drop `PYONEX_DB_PATH`, set `DATABASE_URL=postgres://…`, and update `trade_logg
 
 ## Phases
 
-- **Phase 1 (done)** — indicators, grid calc, Streamlit dashboard, SQLite cache, Render deploy.
+- **Phase 1 (done)** — indicators, grid calc, Streamlit dashboard, SQLite cache, Streamlit Cloud deploy.
 - **Phase 2** — "Log New Trade" + monitored-trade table, close recommendations.
 - **Phase 3** — Telegram alerts on STRONG SETUP transitions.
 - **Phase 4** — Pionex read-only monitor; re-recommend on trend change.
 
 ## Changelog
 
-- **v6.4** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Render blueprint.
+- **v6.4** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Deployed on Streamlit Community Cloud.

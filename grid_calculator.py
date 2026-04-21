@@ -101,7 +101,7 @@ def select_grid_direction(structure4h: str, score: float) -> dict:
             "type": "Long", "label": "Long Grid",
             "reason": "Bullish structure — range biased below price to accumulate on dips",
         }
-    if structure4h == "Bearish" and score < d["SHORT_MAX_SCORE"]:
+    if structure4h == "Bearish" and score >= d["SHORT_MAX_SCORE"]:
         return {
             "type": "Short", "label": "Short Grid",
             "reason": "Bearish structure — range biased above price to sell into pumps",
@@ -284,10 +284,10 @@ def calc_grid_score(m: dict | None) -> dict:
     components.append({"label": "POC in Range", "score": poc_score, "max": 2.0, "detail": poc_detail})
     score += poc_score
 
-    # RSI neutral (max 1.0)
-    if 40 <= rsi <= 60:
+    # RSI neutral (max 1.0) — widened for aggressive crypto posture
+    if 35 <= rsi <= 65:
         rsi_score = 1.0; rsi_tag = "neutral zone [ok]"
-    elif 35 <= rsi <= 65:
+    elif 28 <= rsi <= 72:
         rsi_score = 0.5; rsi_tag = "acceptable"
     else:
         rsi_score = 0.0; rsi_tag = "extreme [x]"
@@ -332,7 +332,7 @@ def calc_grid_score(m: dict | None) -> dict:
     if poc_score < 2.0 and rl is not None:
         recs.append("Consider widening range to include both POC5d and POC14d")
     if rsi_score < 0.5:
-        recs.append(f"RSI {rsi:.0f} extreme — wait for 40-60 range")
+        recs.append(f"RSI {rsi:.0f} extreme — wait for 28-72 range")
     if fund_score == 0:
         recs.append("Funding elevated — crowded trade, higher liquidation risk")
 
