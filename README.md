@@ -2,8 +2,6 @@
 
 Streamlit + Plotly dashboard that pulls live Binance/Bybit data, runs the exact indicator + grid math from the original JS engine (plus Donchian & squeeze add-ons), and recommends Pionex grid-bot configurations.
 
-https://range-finder.streamlit.app/
-
 ## What it does
 
 - Scores each pair 0–10 for grid-bot suitability (ADX, BB, CVD lateral, POC-in-range, RSI, funding, squeeze bonus).
@@ -11,7 +9,6 @@ https://range-finder.streamlit.app/
 - Derives a range from ATR%, picks Arithmetic vs Geometric, recommends grid count, estimates duration.
 - Checks viability (ADX / RSI / BB / structure gates) and surfaces warnings.
 - Renders a "copy-to-Pionex" card for the active recommendation.
-<img width="971" height="1005" alt="image" src="https://github.com/user-attachments/assets/0b56b308-0151-4a3a-8cf8-6260453e3303" />
 
 ## Files
 
@@ -111,6 +108,3 @@ pyonex/
 ## Changelog
 
 - **Range Finder ⚡** — initial Python port from JS engine. Added Donchian (20/55) + squeeze detector. Binance → Bybit fallback. Deployed on Streamlit Community Cloud.
-
-- <img width="952" height="932" alt="image" src="https://github.com/user-attachments/assets/6e714c42-a624-4849-82b7-b71ce0b8a485" />
-

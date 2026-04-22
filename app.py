@@ -13,6 +13,8 @@ from grid_calculator import (
     calc_grid_take_profit,
 )
 from refresh_data import refresh_one
+from bot_monitor import render_bot_monitor
+from signal_scanner import render_signal_scanner
 from trade_logger import all_latest, init_db, latest_metrics
 
 st.set_page_config(
@@ -142,12 +144,26 @@ def context_chip(structure: str, adx: float) -> str:
     return chip(f"{regime} · {structure}", kind)
 
 
-def render_trade_setup(price: float, atr_p: float, str4h: str) -> None:
-    """Spot directional trade card — entry zone, SL, TP1, TP2, R/R."""
+def render_trade_setup(price: float, atr_p: float, str4h: str, signal_dir: str = "") -> None:
+    """Spot directional trade card — entry zone, SL, TP1, TP2, R/R.
+
+    Direction logic (tightened):
+      1. If Signal Scanner says SHORT explicitly → SHORT
+      2. If structure is Bearish → SHORT
+      3. If Signal Scanner says LONG explicitly → LONG
+      4. Otherwise → LONG (default)
+    """
     if price <= 0 or atr_p <= 0:
         return
     atr_abs  = price * (atr_p / 100.0)
-    is_long  = str4h != "Bearish"
+    if signal_dir == "Short":
+        is_long = False
+    elif str4h == "Bearish":
+        is_long = False
+    elif signal_dir == "Long":
+        is_long = True
+    else:
+        is_long = str4h != "Bearish"
     sign     = 1 if is_long else -1
     el       = price - atr_abs * 0.3
     eh       = price + atr_abs * 0.3
@@ -166,10 +182,19 @@ def render_trade_setup(price: float, atr_p: float, str4h: str) -> None:
     sl_c     = "#ef4444"
     tp_c     = "#22c55e"
 
+    # Show override source when signal disagrees with structure
+    _override = ""
+    if signal_dir and signal_dir != ("Long" if is_long else "Short"):
+        pass  # no override happened, signal agreed
+    elif signal_dir == "Short" and str4h != "Bearish":
+        _override = f" {chip('Signal Override', 'yellow')}"
+    elif signal_dir == "Long" and str4h == "Bearish":
+        _override = f" {chip('Signal Override', 'yellow')}"
+
     st.markdown(
         f"<div class='card {card_cls}' style='margin-top:-.25rem'>"
         f"<div style='font-size:.72rem;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:.3rem'>"
-        f"Spot Trade Setup &nbsp;{chip(dir_lbl, dir_kind)}</div>"
+        f"Spot Trade Setup &nbsp;{chip(dir_lbl, dir_kind)}{_override}</div>"
         f"<div style='font-size:.82rem;color:#94a3b8;margin-bottom:.35rem'>"
         f"Entry &nbsp;<b style='color:#f1f5f9'>{el:,.4f} – {eh:,.4f}</b>"
         f"<span style='color:#94a3b8'> USDT</span></div>"
@@ -249,6 +274,12 @@ with st.sidebar:
     profile_override = st.selectbox(
         "Volatility profile", ["auto", "stable", "moderate", "volatile"], index=0,
         help="Auto = per-ticker default. Overrides SL/TP buffers otherwise.",
+    )
+
+    st.divider()
+    page = st.radio(
+        "View", ["Range Finder", "Signal Scanner", "Bot Monitor"],
+        horizontal=True, label_visibility="collapsed",
     )
 
     col_a, col_b = st.columns(2)
@@ -412,7 +443,8 @@ def render_symbol(payload: dict, symbol: str) -> None:
         unsafe_allow_html=True,
     )
 
-    render_trade_setup(price, atr_p, str4h)
+    _sig_dir = ((payload.get("signalInfo") or {}).get("signal_type") or {}).get("direction", "")
+    render_trade_setup(price, atr_p, str4h, _sig_dir)
 
     # ── Zone 1: Key signal pills ────────────────────────────────────
     def sig_pill(label: str, value: str, color: str) -> str:
@@ -520,6 +552,16 @@ for sym in selected:
 
 if not payloads:
     st.warning("No cached metrics yet — press **Refresh now** in the sidebar.")
+    st.stop()
+
+# ── Signal Scanner page ──────────────────────────────────────────────
+if page == "Signal Scanner":
+    render_signal_scanner(selected, payloads)
+    st.stop()
+
+# ── Bot Monitor page ─────────────────────────────────────────────────
+if page == "Bot Monitor":
+    render_bot_monitor(selected, payloads)
     st.stop()
 
 # ── Summary table with conditional styling ─────────────────────────

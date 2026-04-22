@@ -77,11 +77,41 @@ GRID_CONFIG: dict = {
     "DIRECTION": {"LONG_MIN_SCORE": 6.0, "SHORT_MAX_SCORE": 4.5},  # LONG_MIN lowered from 6.5
 }
 
+BOT_MONITOR_CFG: dict = {
+    "TP_PROFIT_PCT": 3.0,
+    "RANGE_EDGE_PCT": 2.0,
+    "MAX_DURATION_DAYS": 14,
+    "ADX_EXIT": 28,
+    "BB_EXPAND": 12.0,
+    "LOSS_WARN_PCT": -5.0,
+}
+
 # Default pairs user confirmed (USDT perps)
 DEFAULT_PAIRS: list[str] = [
     "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "TRX/USDT",
     "SUI/USDT", "HYPE/USDT", "XRP/USDT", "XLM/USDT",
 ]
+
+SIGNAL_CFG: dict = {
+    "CVD_DIV_LOOKBACK": 20,
+    "CVD_DIV_PIVOT_BARS": 2,
+    "SQ_COMPRESSION_SLOPE": -0.05,
+    "SQ_PERCENTILE_LOOKBACK": 50,
+    "SQ_BW_THRESHOLD": 5.0,
+    "STRUCT_TRANS_LOOKBACK": 20,
+    "STRUCT_EXHAUSTION_PCT": 0.1,
+    "FUNDING_EXTREME": 0.08,
+    "FUNDING_ELEVATED": 0.05,
+    "OI_BUILDUP_PCT": 10.0,
+    "OI_CLEARING_PCT": -5.0,
+    "MOM_DIV_LOOKBACK": 20,
+    "VOL_EX_LOOKBACK": 20,
+    "VOL_EX_SLOPE": -2.0,
+    "VOL_EX_PERCENTILE": 40,
+    "URGENCY": {"URGENT": 10.0, "SOON": 7.0, "WATCH": 4.0},
+    "LABELS": {7.5: "STRONG SIGNAL", 5.0: "DEVELOPING", 3.0: "EARLY", 0.0: "NO SIGNAL"},
+    "CHART_SERIES_LEN": 50,
+}
 
 SIG_TIPS: dict = {
     "Trend Macro":     "Macro trend (30d). Checks price vs AVWAP14d/30d, CVD30d, and Structure30d. 3 of 4 conditions = confirmed direction.",

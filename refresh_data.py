@@ -24,6 +24,7 @@ from grid_calculator import (
     select_grid_mode,
 )
 from indicators import OIData, get_advanced_metrics, parse_klines
+from signal_engine import calc_setup_score
 from trade_logger import init_db, upsert_metrics
 
 logging.basicConfig(
@@ -83,6 +84,8 @@ def refresh_one(symbol: str) -> dict | None:
         structure=structure4h,
     )
 
+    signal_info = calc_setup_score(metrics, df_main)
+
     payload = {
         "metrics": metrics,
         "profile": profile,
@@ -93,6 +96,7 @@ def refresh_one(symbol: str) -> dict | None:
         "gridCount": recommended,
         "duration": duration,
         "viability": viability,
+        "signalInfo": signal_info,
     }
     upsert_metrics(symbol, price, score, direction["type"], payload)
     log.info(
