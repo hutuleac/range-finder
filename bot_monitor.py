@@ -247,7 +247,11 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
         bots = client.list_running_bots()
 
     if not bots:
-        st.info("No running spot grid bots found on Pionex.")
+        if client.last_error:
+            st.error(f"Pionex API error: {client.last_error}")
+            st.caption("Check that your API key has **Bot reading** permission enabled.")
+        else:
+            st.info("No running spot grid bots found on Pionex.")
         return
 
     # Match bots to our cached metrics
