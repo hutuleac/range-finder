@@ -7,6 +7,7 @@ import streamlit as st
 
 from bot_advisor import assess_bot_health
 from pionex_client import PionexClient
+from telegram_alerts import is_configured as tg_configured, send_bot_alert
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -215,6 +216,23 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str) -> Non
         f"</div>"
     )
 
+    # Restart recommendation
+    restart = advice.get("restart")
+    if restart:
+        dir_c = "#22c55e" if restart["direction"] == "Long" else "#ef4444" if restart["direction"] == "Short" else "#fbbf24"
+        html += (
+            "<div class='bot-alert' style='background:#0c1222;border:1px solid #1e3a5f'>"
+            "<div style='font-size:.7rem;color:#38bdf8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.2rem'>Restart Recommendation</div>"
+            f"<div style='font-size:.86rem;color:#f1f5f9;font-weight:600'>"
+            f"<span style='color:{dir_c}'>{restart['direction']}</span> Grid · "
+            f"{restart['rangeLow']:,.4f} – {restart['rangeHigh']:,.4f}"
+            f"</div>"
+            f"<div style='font-size:.78rem;color:#94a3b8;margin-top:.15rem'>"
+            f"{restart['rangeWidthPct']:.1f}% · {restart['grids']}g · {restart['mode']} · ~{restart['duration']}"
+            f"</div>"
+            "</div>"
+        )
+
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
@@ -290,12 +308,21 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
         if not metrics.get("currClose"):
             continue
 
-        advice = assess_bot_health(bot, metrics, signal_info)
+        advice = assess_bot_health(bot, metrics, signal_info, symbol=pair)
         assessments.append({"bot": bot, "metrics": metrics, "advice": advice, "symbol": pair})
 
     if not assessments:
         st.warning("Active bots found but no matching cached metrics. Press Refresh to fetch market data.")
         return
+
+    # Send Telegram alerts for actionable events
+    if tg_configured():
+        tg_sent = 0
+        for a in assessments:
+            if send_bot_alert(a["symbol"], a["advice"]):
+                tg_sent += 1
+        if tg_sent:
+            st.toast(f"Sent {tg_sent} Telegram alert(s)")
 
     # Portfolio summary
     _render_portfolio_summary(assessments, len(bots))

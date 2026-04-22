@@ -4,6 +4,14 @@ from __future__ import annotations
 import time
 
 from config import BOT_MONITOR_CFG as BC
+from grid_calculator import (
+    calc_range_from_atr,
+    calc_recommended_grid_count,
+    estimate_grid_duration,
+    get_ticker_grid_profile,
+    select_grid_direction,
+    select_grid_mode,
+)
 
 
 def _check_price_position(price: float, lower: float, upper: float) -> dict:
@@ -169,7 +177,34 @@ def _generate_recommendation(pos: dict, trend: dict, profit: dict, duration: dic
     }
 
 
-def assess_bot_health(bot: dict, metrics: dict, signal_info: dict | None = None) -> dict:
+def _build_restart(symbol: str, metrics: dict, grid_score: float) -> dict | None:
+    """Build a restart recommendation with fresh ATR-derived range."""
+    price = metrics.get("currClose", 0.0)
+    atr_pct = metrics.get("atrPct", 0.0)
+    structure = metrics.get("structure4h", "Neutral")
+    if price <= 0 or atr_pct <= 0:
+        return None
+
+    profile = get_ticker_grid_profile(symbol)
+    direction = select_grid_direction(structure, grid_score)
+    rng = calc_range_from_atr(price, atr_pct, profile["rangeMultiplier"], direction["type"])
+    mode = select_grid_mode(rng["rangeWidthPct"])
+    grids = calc_recommended_grid_count(rng["rangeHigh"], rng["rangeLow"])
+    duration = estimate_grid_duration(rng["rangeWidthPct"], atr_pct)
+
+    return {
+        "direction": direction["type"],
+        "rangeLow": rng["rangeLow"],
+        "rangeHigh": rng["rangeHigh"],
+        "rangeWidthPct": rng["rangeWidthPct"],
+        "mode": mode["mode"],
+        "grids": grids["recommended"],
+        "duration": duration["label"],
+        "profile": profile["profile"],
+    }
+
+
+def assess_bot_health(bot: dict, metrics: dict, signal_info: dict | None = None, symbol: str = "") -> dict:
     """Main entry point. Returns full health assessment for one bot."""
     price = metrics.get("currClose", 0.0)
     upper = float(bot.get("upperPrice") or 0)
@@ -181,10 +216,17 @@ def assess_bot_health(bot: dict, metrics: dict, signal_info: dict | None = None)
     duration = _check_duration(bot)
     rec = _generate_recommendation(pos, trend, profit, duration)
 
+    # Restart recommendation when action is CLOSE or TAKE_PROFIT
+    restart = None
+    if rec["action"] in ("CLOSE_NOW", "TAKE_PROFIT", "REVIEW"):
+        grid_score = metrics.get("_grid_score", 0.0)
+        restart = _build_restart(symbol, metrics, grid_score)
+
     return {
         "position": pos,
         "trend": trend,
         "profit": profit,
         "duration": duration,
         "recommendation": rec,
+        "restart": restart,
     }

@@ -6,6 +6,7 @@ import html as _html
 import pandas as pd
 import streamlit as st
 
+from telegram_alerts import is_configured as tg_configured, send_signal_alert
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -418,6 +419,11 @@ def render_signal_scanner(selected: list[str], payloads: dict[str, dict]) -> Non
     if not signal_data:
         st.warning("No signal data — press **Refresh now** in the sidebar to generate signals.")
         return
+
+    # Telegram alerts for URGENT signals
+    if tg_configured():
+        for d in signal_data:
+            send_signal_alert(d["symbol"], d["signal_info"])
 
     # Section A: Urgency ranking table
     _render_urgency_table(signal_data)
