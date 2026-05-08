@@ -2,7 +2,6 @@
 
 Run:
     python -m refresh_data
-Render cron schedule: every 5 min.
 """
 from __future__ import annotations
 
@@ -37,9 +36,9 @@ log = logging.getLogger("pyonex.refresh")
 def refresh_one(symbol: str) -> dict | None:
     t0 = time.time()
     raw_main = fetch_klines(symbol, "4h", CFG["KLINES_MAIN"])
-    raw_5d = fetch_klines(symbol, "4h", CFG["KLINES_5D"])
-    raw_14d = fetch_klines(symbol, "4h", CFG["KLINES_14D"])
-    raw_30d = fetch_klines(symbol, "4h", CFG["KLINES_30D"])
+    raw_5d   = raw_main[-CFG["KLINES_5D"]:]
+    raw_14d  = raw_main[-CFG["KLINES_14D"]:]
+    raw_30d  = raw_main[-CFG["KLINES_30D"]:]
     raw_flow = fetch_klines(symbol, "1h", CFG["FLOW_LIMIT"])
     if not raw_main:
         log.warning("skip %s — no main klines", symbol)

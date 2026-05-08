@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html as _html
+import logging
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -101,7 +102,7 @@ def _start_scheduler():
         try:
             _main(DEFAULT_PAIRS)
         except Exception:  # noqa: BLE001
-            pass
+            logging.getLogger("pyonex.scheduler").exception("background refresh failed")
 
     sched = BackgroundScheduler(daemon=True)
     sched.add_job(

@@ -146,18 +146,12 @@ rsi_values = calc_rsi(ohlcv_df, period=14)
 ```
 
 ### Grid Recommendation
-`grid_calculator.get_ticker_grid_profile()` is the main entry point:
+`refresh_one(symbol)` in `refresh_data.py` is the main entry point — it fetches data, runs all indicators, scores, and upserts to SQLite. For per-ticker config (rangeMultiplier, maxGrids, profile):
 ```python
-profile = get_ticker_grid_profile(
-    ticker="BTC/USDT",
-    ohlcv_4h=klines_4h,
-    ohlcv_5d=klines_5d,
-    ohlcv_14d=klines_14d,
-    ohlcv_30d=klines_30d,
-    oi_data=oi_4h,
-    funding_rate=current_funding
-)
-# Returns: { 'score', 'direction', 'range', 'mode', 'grid_count', 'viability', ... }
+from grid_calculator import get_ticker_grid_profile
+profile = get_ticker_grid_profile("BTC/USDT")
+# Returns: { 'profile': 'stable', 'rangeMultiplier': 2.5, 'maxGrids': 30 }
+# Static lookup only — no data fetching.
 ```
 
 ### Adding a New Indicator
