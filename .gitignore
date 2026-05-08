@@ -23,3 +23,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# graphify — commit graph.json, graph.html, GRAPH_REPORT.md; exclude local-only files
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/cache/
