@@ -223,7 +223,12 @@ def update_simulation(trade_id: int) -> dict:
     if not raw:
         return {"error": f"no klines for {trade.symbol}"}
 
-    last_ts    = trade.last_candle_ts or 0.0
+    # On first run last_candle_ts is None — use opened_at so we don't replay history
+    last_ts = (
+        trade.last_candle_ts
+        if trade.last_candle_ts is not None
+        else trade.opened_at.timestamp() * 1000
+    )
     new_candles = [r for r in raw if float(r[0]) > last_ts]
     if not new_candles:
         return {"status": "up_to_date", "new_fills": 0}
