@@ -67,7 +67,7 @@ def calc_recommended_grid_count(
             min_g = g
             break
 
-    max_g = min(100, round(total_range / (0.001 + fee_cost)))
+    max_g = min(100, round(total_range / (GRID_CONFIG["MIN_GRID_FLOOR_PCT"] + fee_cost)))
     return {
         "recommended": max(min_g, min(recommended, 100)),
         "min": min_g,
@@ -81,11 +81,12 @@ def calc_range_from_atr(
     grid_type: GridType = "Neutral",
 ) -> dict:
     offset = (atr_pct / 100.0) * multiplier
+    cap = GRID_CONFIG["DIRECTION_OFFSET_CAP"]
     if grid_type == "Long":
         range_low = current_price * (1 - offset * 2)
-        range_high = current_price * (1 + offset * 0.25)
+        range_high = current_price * (1 + offset * cap)
     elif grid_type == "Short":
-        range_low = current_price * (1 - offset * 0.25)
+        range_low = current_price * (1 - offset * cap)
         range_high = current_price * (1 + offset * 2)
     else:
         range_low = current_price * (1 - offset)
@@ -180,15 +181,16 @@ def assess_grid_viability(atr_pct: float, adx: float, rsi: float, bb_bw: float, 
 
 
 def estimate_grid_duration(range_width_pct: float, atr_pct: float) -> dict:
-    daily_range = atr_pct * 1.5
+    daily_range = atr_pct * GRID_CONFIG["ATR_DAILY_MULT"]
     if daily_range <= 0:
         return {"estDays": 0, "label": "—"}
     est_days = max(1, min(round(range_width_pct / daily_range), 30))
-    if est_days <= 3:
+    d = GRID_CONFIG["DURATION_DAYS"]
+    if est_days <= d[0]:
         label = "1-3 days"
-    elif est_days <= 7:
+    elif est_days <= d[1]:
         label = "3-7 days"
-    elif est_days <= 14:
+    elif est_days <= d[2]:
         label = "1-2 weeks"
     else:
         label = "2-4 weeks"

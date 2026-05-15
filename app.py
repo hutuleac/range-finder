@@ -300,8 +300,7 @@ with st.sidebar:
     last_ts = max((r.updated_at for r in rows), default=None)
     if last_ts:
         delta = (datetime.now(timezone.utc) - last_ts.astimezone(timezone.utc)).total_seconds()
-        _CACHE_FRESH_S, _CACHE_STALE_S = 400, 1400
-        age_color = "green" if delta < _CACHE_FRESH_S else "orange" if delta < _CACHE_STALE_S else "red"
+        age_color = "green" if delta < CFG["CACHE_FRESH_S"] else "orange" if delta < CFG["CACHE_STALE_S"] else "red"
         st.markdown(
             f"Cache age: <span style='color:{age_color};font-weight:600'>{int(delta)}s</span>"
             f" · rows: {len(rows)}",

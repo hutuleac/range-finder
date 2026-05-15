@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 import ccxt
 from dotenv import load_dotenv
@@ -71,8 +72,9 @@ def _to_okx_symbol(symbol: str) -> str:
 # symbol -> exchange name that last succeeded, so we skip repeated Binance misses
 _source_cache: dict[str, str] = {}
 
-# set True on first Binance 451 — skips Binance for all subsequent calls
-_binance_blocked: bool = False
+# epoch-seconds until which Binance is geo-blocked; 0 = not blocked
+# auto-resets after CFG["BINANCE_BLOCK_TTL_SEC"] (default 30 min)
+_binance_blocked_until: float = 0.0
 
 
 def _is_geo_blocked(exc: Exception) -> bool:
@@ -86,8 +88,8 @@ def _is_geo_blocked(exc: Exception) -> bool:
 #  Downstream CVD falls back to the open/close heuristic when buy vol is 0.
 # ─────────────────────────────────────────────────────────────────────
 def _binance_raw_klines(symbol: str, timeframe: str, limit: int) -> list[list] | None:
-    global _binance_blocked
-    if _binance_blocked:
+    global _binance_blocked_until
+    if time.time() < _binance_blocked_until:
         return None
     ex = _get_binance()
     market = symbol.replace("/", "").upper()
@@ -96,8 +98,8 @@ def _binance_raw_klines(symbol: str, timeframe: str, limit: int) -> list[list] |
         return raw if isinstance(raw, list) else None
     except Exception as e:  # noqa: BLE001
         if _is_geo_blocked(e):
-            _binance_blocked = True
-            log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+            _binance_blocked_until = time.time() + CFG["BINANCE_BLOCK_TTL_SEC"]
+            log.warning("Binance geo-blocked (451) — retrying in %ds", CFG["BINANCE_BLOCK_TTL_SEC"])
         else:
             log.info("binance raw klines %s: %s", symbol, e)
         return None
@@ -161,8 +163,8 @@ def fetch_klines(symbol: str, timeframe: str, limit: int) -> list[list]:
 #  Bybit:   /v5/market/open-interest    (intervalTime=4h)
 # ─────────────────────────────────────────────────────────────────────
 def _binance_oi(symbol: str) -> OIData | None:
-    global _binance_blocked
-    if _binance_blocked:
+    global _binance_blocked_until
+    if time.time() < _binance_blocked_until:
         return None
     try:
         ex = _get_binance()
@@ -180,8 +182,8 @@ def _binance_oi(symbol: str) -> OIData | None:
         return OIData(oiNow=oi_now, oiChange=change)
     except Exception as e:  # noqa: BLE001
         if _is_geo_blocked(e):
-            _binance_blocked = True
-            log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+            _binance_blocked_until = time.time() + CFG["BINANCE_BLOCK_TTL_SEC"]
+            log.warning("Binance geo-blocked (451) — retrying in %ds", CFG["BINANCE_BLOCK_TTL_SEC"])
         else:
             log.info("binance OI %s: %s", symbol, e)
         return None
@@ -249,14 +251,14 @@ def fetch_oi(symbol: str) -> OIData:
 #  Funding rate (most recent)
 # ─────────────────────────────────────────────────────────────────────
 def fetch_funding(symbol: str) -> float:
-    global _binance_blocked
+    global _binance_blocked_until
     cached = _source_cache.get(symbol)
     order = (
         [cached, *(s for s in ["okx", "bybit", "binance"] if s != cached)]
         if cached else ["okx", "bybit", "binance"]
     )
     for src in order:
-        if src == "binance" and _binance_blocked:
+        if src == "binance" and time.time() < _binance_blocked_until:
             continue
         try:
             ex = {"binance": _get_binance, "bybit": _get_bybit, "okx": _get_okx}[src]()
@@ -267,8 +269,8 @@ def fetch_funding(symbol: str) -> float:
                 return float(rate) * 100.0
         except Exception as e:  # noqa: BLE001
             if src == "binance" and _is_geo_blocked(e):
-                _binance_blocked = True
-                log.warning("Binance geo-blocked (451) — switching to Bybit-only for this process")
+                _binance_blocked_until = time.time() + CFG["BINANCE_BLOCK_TTL_SEC"]
+                log.warning("Binance geo-blocked (451) — retrying in %ds", CFG["BINANCE_BLOCK_TTL_SEC"])
             else:
                 log.info("%s funding %s: %s", src, symbol, e)
     return 0.0

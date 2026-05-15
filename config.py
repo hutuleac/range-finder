@@ -4,6 +4,9 @@ from __future__ import annotations
 CFG: dict = {
     "APP_VERSION": "6.4",
     "REFRESH_INTERVAL_SEC": 1200,
+    "CACHE_FRESH_S": 400,
+    "CACHE_STALE_S": 1400,
+    "BINANCE_BLOCK_TTL_SEC": 1800,
 
     # OI
     "OI_PERIOD": "4h",
@@ -75,6 +78,10 @@ GRID_CONFIG: dict = {
     "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 0.7},   # tighter squeeze (was 1.0)
     "CVD_LATERAL": {"FULL_SCORE_BELOW": 0.15, "ZERO_SCORE_ABOVE": 0.30},
     "DIRECTION": {"LONG_MIN_SCORE": 6.0, "SHORT_MAX_SCORE": 4.5},  # LONG_MIN lowered from 6.5
+    "MIN_GRID_FLOOR_PCT": 0.001,     # minimum net % floor used when computing max grid count
+    "DIRECTION_OFFSET_CAP": 0.25,    # short-side cap multiplier for directional grids
+    "ATR_DAILY_MULT": 1.5,           # 4H ATR × this ≈ daily range estimate
+    "DURATION_DAYS": [3, 7, 14],     # day thresholds for the short/medium/long duration labels
 }
 
 BOT_MONITOR_CFG: dict = {

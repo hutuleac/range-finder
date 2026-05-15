@@ -100,34 +100,26 @@ def calc_macd_histogram_series(df: pd.DataFrame, fast: int = 12, slow: int = 26,
 # ─────────────────────────────────────────────────────────────────────
 #  Pivot detection helper
 # ─────────────────────────────────────────────────────────────────────
-def _find_swing_pivots(arr: np.ndarray, pivot_bars: int = 2) -> list[tuple[int, float]]:
-    """Find swing highs/lows using N-bar pivot logic.
-    Returns list of (index, value) for pivots."""
-    pivots: list[tuple[int, float]] = []
+def _find_swing_pivots(
+    arr: np.ndarray, pivot_bars: int = 2, direction: str = "both"
+) -> list[tuple[int, float]]:
+    """Find swing pivots using N-bar pivot logic.
+
+    direction: 'high' | 'low' | 'both'
+    Returns list of (index, value).
+    """
+    result: list[tuple[int, float]] = []
     n = len(arr)
     for i in range(pivot_bars, n - pivot_bars):
-        is_high = all(arr[i] >= arr[i - j] and arr[i] >= arr[i + j] for j in range(1, pivot_bars + 1))
-        is_low = all(arr[i] <= arr[i - j] and arr[i] <= arr[i + j] for j in range(1, pivot_bars + 1))
-        if is_high or is_low:
-            pivots.append((i, float(arr[i])))
-    return pivots
-
-
-def _find_swing_highs(highs: np.ndarray, pivot_bars: int = 2) -> list[tuple[int, float]]:
-    result: list[tuple[int, float]] = []
-    n = len(highs)
-    for i in range(pivot_bars, n - pivot_bars):
-        if all(highs[i] >= highs[i - j] and highs[i] >= highs[i + j] for j in range(1, pivot_bars + 1)):
-            result.append((i, float(highs[i])))
-    return result
-
-
-def _find_swing_lows(lows: np.ndarray, pivot_bars: int = 2) -> list[tuple[int, float]]:
-    result: list[tuple[int, float]] = []
-    n = len(lows)
-    for i in range(pivot_bars, n - pivot_bars):
-        if all(lows[i] <= lows[i - j] and lows[i] <= lows[i + j] for j in range(1, pivot_bars + 1)):
-            result.append((i, float(lows[i])))
+        neighbors = range(1, pivot_bars + 1)
+        if direction in ("both", "high") and all(
+            arr[i] >= arr[i - j] and arr[i] >= arr[i + j] for j in neighbors
+        ):
+            result.append((i, float(arr[i])))
+        elif direction in ("both", "low") and all(
+            arr[i] <= arr[i - j] and arr[i] <= arr[i + j] for j in neighbors
+        ):
+            result.append((i, float(arr[i])))
     return result
 
 
@@ -148,8 +140,8 @@ def detect_cvd_divergence(df: pd.DataFrame, lookback: int | None = None) -> dict
     if len(cvd) < 6:
         return default
 
-    swing_highs = _find_swing_highs(prices_h, pivot_bars)
-    swing_lows = _find_swing_lows(prices_l, pivot_bars)
+    swing_highs = _find_swing_pivots(prices_h, pivot_bars, "high")
+    swing_lows = _find_swing_pivots(prices_l, pivot_bars, "low")
 
     # Bearish divergence: price HH + CVD LH
     if len(swing_highs) >= 2:
@@ -225,8 +217,8 @@ def detect_structure_transition(df: pd.DataFrame, lookback: int | None = None) -
     n = len(window)
 
     # Find swing pivots
-    swing_h = _find_swing_highs(highs, 2)
-    swing_l = _find_swing_lows(lows, 2)
+    swing_h = _find_swing_pivots(highs, 2, "high")
+    swing_l = _find_swing_pivots(lows, 2, "low")
 
     # Current structure (same logic as calc_market_structure)
     if n >= 5:
@@ -293,18 +285,19 @@ def detect_momentum_divergence(
     strength = 0.0
 
     # RSI divergence on swing highs
-    sh = _find_swing_highs(prices_h, pivot_bars)
+    sh = _find_swing_pivots(prices_h, pivot_bars, "high")
     if len(sh) >= 2:
         (i1, p1), (i2, p2) = sh[-2], sh[-1]
         if p2 > p1 and rsi_window[i2] < rsi_window[i1]:
             rsi_div = "BEAR"
             strength += 0.5
-        elif len(_find_swing_lows(prices_l, pivot_bars)) >= 2:
-            sl = _find_swing_lows(prices_l, pivot_bars)
-            (i1, p1), (i2, p2) = sl[-2], sl[-1]
-            if p2 < p1 and rsi_window[i2] > rsi_window[i1]:
-                rsi_div = "BULL"
-                strength += 0.5
+        else:
+            sl = _find_swing_pivots(prices_l, pivot_bars, "low")
+            if len(sl) >= 2:
+                (i1, p1), (i2, p2) = sl[-2], sl[-1]
+                if p2 < p1 and rsi_window[i2] > rsi_window[i1]:
+                    rsi_div = "BULL"
+                    strength += 0.5
 
     # MACD histogram divergence: shrinking while price extends
     if len(macd_hist) >= 5:

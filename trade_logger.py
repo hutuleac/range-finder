@@ -5,12 +5,11 @@ Trade model is scaffolded for Phase 2.
 """
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, create_engine, select
+from sqlalchemy import Column, DateTime, Float, Integer, JSON, String, UniqueConstraint, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session
 
 DB_PATH = os.getenv("PYONEX_DB_PATH", os.path.join(tempfile.gettempdir(), "pyonex.db"))
@@ -24,6 +23,7 @@ class Base(DeclarativeBase):
 
 class MetricsCache(Base):
     __tablename__ = "metrics_cache"
+    __table_args__ = (UniqueConstraint("symbol", name="uq_metrics_symbol"),)
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String(32), index=True, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
@@ -54,34 +54,41 @@ def init_db() -> None:
     Base.metadata.create_all(_engine)
 
 
+# Initialise schema once at import time — no per-call overhead.
+init_db()
+
+
 def upsert_metrics(symbol: str, price: float, score: float, direction: str, payload: dict) -> None:
-    init_db()
     with Session(_engine, future=True) as s:
-        row = MetricsCache(
-            symbol=symbol,
-            price=price,
-            score=score,
-            direction=direction,
-            payload=json.loads(json.dumps(payload, default=str)),
-        )
-        s.add(row)
+        row = s.execute(
+            select(MetricsCache).where(MetricsCache.symbol == symbol)
+            .order_by(MetricsCache.updated_at.desc()).limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            row = MetricsCache(symbol=symbol)
+            s.add(row)
+        row.price = price
+        row.score = score
+        row.direction = direction
+        row.payload = payload
+        row.updated_at = datetime.now(timezone.utc)
         s.commit()
 
 
 def latest_metrics(symbol: str) -> MetricsCache | None:
-    init_db()
     with Session(_engine, future=True) as s:
-        stmt = select(MetricsCache).where(MetricsCache.symbol == symbol) \
-                                    .order_by(MetricsCache.updated_at.desc()).limit(1)
-        return s.execute(stmt).scalar_one_or_none()
+        return s.execute(
+            select(MetricsCache).where(MetricsCache.symbol == symbol)
+            .order_by(MetricsCache.updated_at.desc()).limit(1)
+        ).scalar_one_or_none()
 
 
 def all_latest() -> list[MetricsCache]:
-    """One row per symbol — the latest. Uses a grouped subquery."""
-    init_db()
+    """One row per symbol — the latest."""
     with Session(_engine, future=True) as s:
-        # simple path: fetch all, pick newest per symbol in Python (Phase 1 volume trivial)
-        rows = s.execute(select(MetricsCache).order_by(MetricsCache.updated_at.desc())).scalars().all()
+        rows = s.execute(
+            select(MetricsCache).order_by(MetricsCache.updated_at.desc())
+        ).scalars().all()
         seen: dict[str, MetricsCache] = {}
         for r in rows:
             seen.setdefault(r.symbol, r)
