@@ -166,14 +166,12 @@ def _render_history(trades: list) -> None:
         final_pnl_pct = sum(f.pnl_pct for f in fills if f.action == "SELL" and f.pnl_pct) / t.num_grids * 100
         final_pnl_usd = sum(f.pnl_usd for f in fills if f.action == "SELL" and f.pnl_usd) if t.capital else None
 
-        duration = _age_str(t.opened_at) if t.closed_at is None else _age_str(
-            datetime.now(timezone.utc) - (t.closed_at.astimezone(timezone.utc) - t.opened_at.astimezone(timezone.utc))
-            + datetime.now(timezone.utc)
-        )
         if t.closed_at and t.opened_at:
             secs = (t.closed_at.astimezone(timezone.utc) - t.opened_at.astimezone(timezone.utc)).total_seconds()
             h = int(secs // 3600); d = h // 24
             duration = f"{d}d {h%24}h" if d else f"{h}h"
+        else:
+            duration = _age_str(t.opened_at)
 
         rows.append({
             "Symbol":    t.symbol,
