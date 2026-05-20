@@ -53,6 +53,8 @@ def calc_recommended_grid_count(
     range_high: float, range_low: float,
     target_net_pct: float = GRID_CONFIG["TARGET_NET_PCT"],
     fee_pct: float = GRID_CONFIG["FEE_PCT"],
+    min_grid_floor_pct: float = GRID_CONFIG["MIN_GRID_FLOOR_PCT"],
+    max_grids: int = 100,
 ) -> dict:
     if range_low <= 0:
         return {"recommended": 1, "min": 1, "max": 1}
@@ -67,9 +69,9 @@ def calc_recommended_grid_count(
             min_g = g
             break
 
-    max_g = min(100, round(total_range / (GRID_CONFIG["MIN_GRID_FLOOR_PCT"] + fee_cost)))
+    max_g = min(max_grids, round(total_range / (min_grid_floor_pct + fee_cost)))
     return {
-        "recommended": max(min_g, min(recommended, 100)),
+        "recommended": max(min_g, min(recommended, max_grids)),
         "min": min_g,
         "max": max(min_g, max_g),
     }
@@ -199,19 +201,24 @@ def estimate_grid_duration(range_width_pct: float, atr_pct: float) -> dict:
 
 def get_ticker_grid_profile(ticker: str) -> dict:
     t = ticker.split("/")[0].upper()
+    # targetNetPct: desired profit per grid after fees (fee round-trip = 0.10%)
+    # minNetPct: absolute floor — grid count never exceeds range/(minNetPct+fees)
+    # rangeMultiplier: ATR × this = half-offset; stable low-vol coins need higher multiplier
     profiles = {
-        "BTC":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30},
-        "ETH":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30},
-        "BNB":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30},
-        "SOL":  {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40},
-        "TRX":  {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40},
-        "DOGE": {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40},
-        "XLM":  {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40},
-        "XRP":  {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40},
-        "SUI":  {"profile": "volatile", "rangeMultiplier": 3.5, "maxGrids": 50},
-        "HYPE": {"profile": "volatile", "rangeMultiplier": 3.5, "maxGrids": 50},
+        "BTC":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30, "targetNetPct": 0.006, "minNetPct": 0.002},
+        "ETH":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30, "targetNetPct": 0.006, "minNetPct": 0.002},
+        "BNB":  {"profile": "stable",   "rangeMultiplier": 2.5, "maxGrids": 30, "targetNetPct": 0.006, "minNetPct": 0.002},
+        "SOL":  {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40, "targetNetPct": 0.006, "minNetPct": 0.002},
+        # TRX/XLM: extremely stable, tiny ATR% — need wider multiplier and lower per-grid target
+        # to generate enough grids for meaningful fill frequency
+        "TRX":  {"profile": "stable",   "rangeMultiplier": 5.0, "maxGrids": 50, "targetNetPct": 0.003, "minNetPct": 0.001},
+        "XLM":  {"profile": "stable",   "rangeMultiplier": 5.0, "maxGrids": 50, "targetNetPct": 0.003, "minNetPct": 0.001},
+        "DOGE": {"profile": "moderate", "rangeMultiplier": 3.5, "maxGrids": 40, "targetNetPct": 0.005, "minNetPct": 0.002},
+        "XRP":  {"profile": "moderate", "rangeMultiplier": 3.5, "maxGrids": 40, "targetNetPct": 0.005, "minNetPct": 0.002},
+        "SUI":  {"profile": "volatile", "rangeMultiplier": 3.5, "maxGrids": 50, "targetNetPct": 0.008, "minNetPct": 0.004},
+        "HYPE": {"profile": "volatile", "rangeMultiplier": 3.5, "maxGrids": 50, "targetNetPct": 0.008, "minNetPct": 0.004},
     }
-    return profiles.get(t, {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40})
+    return profiles.get(t, {"profile": "moderate", "rangeMultiplier": 3.0, "maxGrids": 40, "targetNetPct": 0.006, "minNetPct": 0.002})
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -239,37 +246,54 @@ def calc_grid_score(m: dict | None) -> dict:
 
     # ADX (max 3.0)
     if adx < 15:
-        adx_score, adx_lbl = 3.0, "ideal range"
+        adx_score = 3.0
+        adx_detail = f"ADX {adx:.1f} — ideal range (<15)"
     elif adx < 20:
-        adx_score, adx_lbl = 2.0, "low"
+        adx_score = 2.0
+        adx_detail = f"ADX {adx:.1f} — low (15–20, block at 25)"
     elif adx < 25:
-        adx_score, adx_lbl = 1.0, "mild"
+        adx_score = 1.0
+        adx_detail = f"ADX {adx:.1f} — mild trend (20–25, block at 25)"
     else:
-        adx_score, adx_lbl = 0.0, "strong trend"
-    components.append({"label": "ADX Trend", "score": adx_score, "max": 3.0,
-                       "detail": f"ADX {adx:.1f} — {adx_lbl}"})
+        adx_score = 0.0
+        adx_detail = f"ADX {adx:.1f} — strong trend (blocked >{GRID_CONFIG['VIABILITY']['ADX_BLOCK']})"
+    components.append({"label": "ADX Trend", "score": adx_score, "max": 3.0, "detail": adx_detail})
     score += adx_score
 
     # BB Width (max 2.0)
+    v_bb_min = GRID_CONFIG["VIABILITY"]["BB_MIN"]
     if bb_label == "squeeze":
-        bb_score, bb_tag = 2.0, "compressed [ok]"
+        bb_score = 2.0
+        bb_detail = f"BB {bb_bw:.1f}% — compressed (max score, threshold {v_bb_min}%)"
     elif bb_label == "normal":
-        bb_score, bb_tag = 1.0, "normal"
+        bb_score = 1.0
+        bb_detail = f"BB {bb_bw:.1f}% — normal (>{v_bb_min}%, watch for squeeze)"
     else:
-        bb_score, bb_tag = 0.0, "expanded [x]"
-    components.append({"label": "BB Width", "score": bb_score, "max": 2.0,
-                       "detail": f"{bb_bw:.1f}% — {bb_tag}"})
+        bb_score = 0.0
+        bb_detail = f"BB {bb_bw:.1f}% — expanded (>15%, wait for compression)"
+    components.append({"label": "BB Width", "score": bb_score, "max": 2.0, "detail": bb_detail})
     score += bb_score
 
     # CVD lateral (max 1.5)
+    cvd_ratio = cvd_delta / vol5d
     cvd_score = 1.5 if is_lateral else 0.0
-    components.append({
-        "label": "CVD Flow", "score": cvd_score, "max": 1.5,
-        "detail": "Lateral — no trend pressure [ok]" if is_lateral else "Directional — trend in progress [x]",
-    })
+    cvd_thresh = CFG["CVD_LATERAL_RATIO"]
+    if is_lateral:
+        cvd_detail = f"CVD ratio {cvd_ratio:.2f} — lateral (<{cvd_thresh} threshold) · no directional bias"
+    else:
+        cvd_detail = f"CVD ratio {cvd_ratio:.2f} — directional (>{cvd_thresh} threshold) · trend in progress"
+    components.append({"label": "CVD Flow", "score": cvd_score, "max": 1.5, "detail": cvd_detail})
     score += cvd_score
 
     # POC in range (max 2.0)
+    def _fmt_p(p: float) -> str:
+        return f"{p:,.1f}" if p >= 1000 else f"{p:,.3f}" if p >= 1 else f"{p:,.4f}"
+
+    def _poc_dist(poc: float, lo: float, hi: float) -> str:
+        if poc < lo:
+            return f"{(lo - poc) / lo * 100:.1f}% below range"
+        return f"{(poc - hi) / hi * 100:.1f}% above range"
+
     poc_score = 0.0
     poc_detail = "Range not computed"
     rl = rng.get("rangeLow")
@@ -277,40 +301,52 @@ def calc_grid_score(m: dict | None) -> dict:
     if rl is not None and rh is not None and poc5d > 0:
         in5 = rl <= poc5d <= rh
         in14 = rl <= poc14d <= rh
+        p5_tag  = f"{_fmt_p(poc5d)} ✓"  if in5  else f"{_fmt_p(poc5d)} ✗ ({_poc_dist(poc5d,  rl, rh)})"
+        p14_tag = f"{_fmt_p(poc14d)} ✓" if in14 else f"{_fmt_p(poc14d)} ✗ ({_poc_dist(poc14d, rl, rh)})"
         if in5 and in14:
-            poc_score, poc_detail = 2.0, "Both POC5d+14d in range [ok]"
+            poc_score = 2.0
+            poc_detail = f"POC5d {p5_tag} · POC14d {p14_tag}"
         elif in5 or in14:
-            poc_score, poc_detail = 1.0, "One POC in range [!]"
+            poc_score = 1.0
+            poc_detail = f"POC5d {p5_tag} · POC14d {p14_tag}"
         else:
-            poc_score, poc_detail = 0.0, "No POC in range — grid may miss magnet [x]"
+            poc_score = 0.0
+            poc_detail = f"POC5d {p5_tag} · POC14d {p14_tag} — widen range"
     components.append({"label": "POC in Range", "score": poc_score, "max": 2.0, "detail": poc_detail})
     score += poc_score
 
     # RSI neutral (max 1.0) — widened for aggressive crypto posture
     if 35 <= rsi <= 65:
-        rsi_score, rsi_tag = 1.0, "neutral zone [ok]"
+        rsi_score = 1.0
+        rsi_detail = f"RSI {rsi:.1f} — neutral zone (35–65)"
     elif 28 <= rsi <= 72:
-        rsi_score, rsi_tag = 0.5, "acceptable"
+        rsi_score = 0.5
+        rsi_detail = f"RSI {rsi:.1f} — acceptable outer zone (28–72)"
     else:
-        rsi_score, rsi_tag = 0.0, "extreme [x]"
-    components.append({"label": "RSI Neutral", "score": rsi_score, "max": 1.0,
-                       "detail": f"RSI {rsi:.1f} — {rsi_tag}"})
+        rsi_score = 0.0
+        rsi_detail = f"RSI {rsi:.1f} — extreme (outside 28–72, blocked)"
+    components.append({"label": "RSI Neutral", "score": rsi_score, "max": 1.0, "detail": rsi_detail})
     score += rsi_score
 
     # Funding neutral (max 0.5)
+    raw_funding = m.get("funding") or 0.0
     fund_score = 0.5 if fund < 0.05 else 0.0
-    components.append({
-        "label": "Funding", "score": fund_score, "max": 0.5,
-        "detail": f"{(m.get('funding') or 0.0):.3f}% — {'neutral [ok]' if fund_score > 0 else 'elevated [!]'}",
-    })
+    fund_detail = (
+        f"{raw_funding:.4f}% — neutral (|rate| < 0.05%)"
+        if fund_score > 0
+        else f"{raw_funding:.4f}% — elevated (threshold ±0.05%, crowded trade)"
+    )
+    components.append({"label": "Funding", "score": fund_score, "max": 0.5, "detail": fund_detail})
     score += fund_score
 
-    # Squeeze bonus (new — Donchian/BB-confirmed range regime)
+    # Squeeze bonus (Donchian/BB-confirmed range regime)
     sq = m.get("squeeze") or {}
     if sq.get("squeeze"):
         score = min(10.0, score + 0.5)
-        components.append({"label": "Squeeze", "score": 0.5, "max": 0.5,
-                           "detail": "BB + Donchian tight — prime grid window"})
+        sq_bbw = sq.get("bbBw", bb_bw)
+        sq_ratio = sq.get("dcAtrRatio", 0.0)
+        sq_detail = f"BB {sq_bbw:.1f}% (<5%) · DC/ATR {sq_ratio:.2f} (<0.70) — prime grid window"
+        components.append({"label": "Squeeze", "score": 0.5, "max": 0.5, "detail": sq_detail})
 
     rounded = round(score * 10) / 10
     if rounded >= 8:

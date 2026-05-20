@@ -72,7 +72,12 @@ def refresh_one(symbol: str) -> dict | None:
     direction = select_grid_direction(structure4h, score)
     directional_range = calc_range_from_atr(price, atr_pct, profile["rangeMultiplier"], direction["type"])
     mode = select_grid_mode(directional_range["rangeWidthPct"])
-    recommended = calc_recommended_grid_count(directional_range["rangeHigh"], directional_range["rangeLow"])
+    recommended = calc_recommended_grid_count(
+        directional_range["rangeHigh"], directional_range["rangeLow"],
+        target_net_pct=profile["targetNetPct"],
+        min_grid_floor_pct=profile["minNetPct"],
+        max_grids=profile["maxGrids"],
+    )
     duration = estimate_grid_duration(directional_range["rangeWidthPct"], atr_pct)
 
     viability = assess_grid_viability(
