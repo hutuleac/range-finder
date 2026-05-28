@@ -53,3 +53,38 @@ class TestRangeFinder:
             if "Cache empty" in (w.value or "")
         ]
         assert len(cache_empty_warnings) == 0
+
+
+class TestSignalScanner:
+    """Signal Scanner page — routed via sidebar radio."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, ui_app):
+        pass  # activates ui_app for every test
+
+    def _run(self) -> AppTest:
+        at = AppTest.from_file(APP_PATH, default_timeout=TIMEOUT)
+        at.run()
+        at.sidebar.radio[0].set_value("Signal Scanner")
+        at.run()
+        return at
+
+    def test_no_exception(self):
+        at = self._run()
+        assert not at.exception
+
+    def test_no_error_widget(self):
+        at = self._run()
+        assert len(at.error) == 0
+
+    def test_signal_content_renders(self):
+        at = self._run()
+        assert len(at.markdown) > 0 or len(at.dataframe) > 0
+
+    def test_score_label_present(self):
+        at = self._run()
+        all_md = " ".join(str(m.value) for m in at.markdown if m.value)
+        assert any(
+            kw in all_md
+            for kw in ("SETUP", "DEVELOPING", "AVOID", "Score", "Setup")
+        )
