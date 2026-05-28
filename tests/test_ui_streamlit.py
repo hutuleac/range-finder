@@ -19,8 +19,8 @@ class TestRangeFinder:
     """Default page — no radio selection needed."""
 
     @pytest.fixture(autouse=True)
-    def setup(self, ui_app):
-        pass
+    def _setup(self, ui_app):
+        pass  # activates ui_app (seeds DB, patches scheduler + PionexClient) for every test
 
     def _run(self) -> AppTest:
         at = AppTest.from_file(APP_PATH, default_timeout=TIMEOUT)
