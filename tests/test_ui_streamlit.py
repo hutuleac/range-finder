@@ -130,3 +130,65 @@ class TestBotMonitor:
         rec_labels = ("HOLD", "CLOSE NOW", "TAKE PROFIT", "WARNING", "WATCH", "REVIEW")
         matched = any(lbl in all_md for lbl in rec_labels)
         assert matched or len(at.warning) > 0
+
+
+class TestTradeMonitor:
+    """Trade Monitor page — empty state and seeded trade."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, ui_app):
+        pass  # activates ui_app for every test
+
+    def _run(self) -> AppTest:
+        at = AppTest.from_file(APP_PATH, default_timeout=TIMEOUT)
+        at.run()
+        at.sidebar.radio[0].set_value("Trade Monitor")
+        at.run()
+        return at
+
+    def test_no_exception(self):
+        at = self._run()
+        assert not at.exception
+
+    def test_no_error_widget(self):
+        at = self._run()
+        assert len(at.error) == 0
+
+    def test_empty_state_renders(self):
+        at = self._run()
+        all_md  = " ".join(str(m.value) for m in at.markdown if m.value)
+        all_inf = " ".join(str(i.value) for i in at.info  if i.value)
+        combined = all_md + all_inf
+        assert (
+            "no" in combined.lower()
+            or "empty" in combined.lower()
+            or "trade" in combined.lower()
+            or len(at.dataframe) > 0
+        )
+
+    def test_trade_table_renders_when_seeded(self):
+        import trade_logger as tl
+        from trade_logger import SimulatedTrade
+
+        trade = SimulatedTrade(
+            symbol="BTC/USDT",
+            entry_price=100_000.0,
+            range_low=90_000.0,
+            range_high=110_000.0,
+            num_grids=20,
+            direction="Long",
+            grid_mode="Arithmetic",
+            grid_score=7.5,
+            stop_loss=81_900.0,
+            take_profit=115_500.0,
+            profile="stable",
+            inventory=[],
+        )
+        tl.create_simulated_trade(trade)
+
+        at = self._run()
+        assert not at.exception
+        all_md = " ".join(str(m.value) for m in at.markdown if m.value)
+        has_table = len(at.dataframe) > 0
+        has_symbol_in_md = "BTC" in all_md
+        assert has_table or has_symbol_in_md
