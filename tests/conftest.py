@@ -179,8 +179,14 @@ def ui_app(monkeypatch):
     bots_path = _Path(__file__).parent / "fixtures" / "pionex_bots.json"
     fixture_bots = _json.loads(bots_path.read_text())
 
-    monkeypatch.setattr(_pc.PionexClient, "api_key",    "test-key",    raising=False)
-    monkeypatch.setattr(_pc.PionexClient, "api_secret", "test-secret", raising=False)
+    # Patch __init__ so api_key/api_secret are set on the instance (not just as
+    # class attributes, which __init__ would overwrite from _get_key()).
+    def _fake_init(self, api_key: str = "", api_secret: str = ""):
+        self.api_key = "test-key"
+        self.api_secret = "test-secret"
+        self.last_error = ""
+
+    monkeypatch.setattr(_pc.PionexClient, "__init__", _fake_init)
     monkeypatch.setattr(_pc.PionexClient, "list_running_bots",
                         lambda self: fixture_bots)
     monkeypatch.setattr(_pc.PionexClient, "get_bot_detail",

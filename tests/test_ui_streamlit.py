@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import pytest
+from datetime import datetime, timezone, timedelta
 from streamlit.testing.v1 import AppTest
 
 APP_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
@@ -192,3 +193,107 @@ class TestTradeMonitor:
         has_table = len(at.dataframe) > 0
         has_symbol_in_md = "BTC" in all_md
         assert has_table or has_symbol_in_md
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Pure-function helper tests (no Streamlit context required)
+# ─────────────────────────────────────────────────────────────────────
+
+class TestBotMonitorHelpers:
+    """Unit tests for pure helpers in bot_monitor — no Streamlit needed."""
+
+    def test_chip_returns_html(self):
+        from bot_monitor import _chip
+        html = _chip("HOLD", "#fff", "#000")
+        assert "HOLD" in html
+        assert "bot-pill" in html
+
+    def test_pnl_color_positive(self):
+        from bot_monitor import _pnl_color
+        assert _pnl_color(1.0)  == "#22c55e"
+
+    def test_pnl_color_negative(self):
+        from bot_monitor import _pnl_color
+        assert _pnl_color(-1.0) == "#ef4444"
+
+    def test_pnl_color_zero(self):
+        from bot_monitor import _pnl_color
+        assert _pnl_color(0.0) == "#94a3b8"
+
+    def test_pionex_symbol_to_pair_with_underscore(self):
+        from bot_monitor import _pionex_symbol_to_pair
+        assert _pionex_symbol_to_pair("BTC_USDT") == "BTC/USDT"
+
+    def test_pionex_symbol_to_pair_without_underscore(self):
+        from bot_monitor import _pionex_symbol_to_pair
+        assert _pionex_symbol_to_pair("BTCUSDT") == "BTCUSDT"
+
+
+class TestTradeMonitorHelpers:
+    """Unit tests for pure helpers in trade_monitor — no Streamlit needed."""
+
+    def test_age_str_none(self):
+        from trade_monitor import _age_str
+        assert _age_str(None) == "—"
+
+    def test_age_str_hours(self):
+        from trade_monitor import _age_str
+        dt = datetime.now(timezone.utc) - timedelta(hours=3, minutes=20)
+        result = _age_str(dt)
+        assert "h" in result
+
+    def test_age_str_days(self):
+        from trade_monitor import _age_str
+        dt = datetime.now(timezone.utc) - timedelta(days=2, hours=5)
+        result = _age_str(dt)
+        assert "d" in result
+
+    def test_pnl_color_positive(self):
+        from trade_monitor import _pnl_color
+        assert _pnl_color(1.0)  == "#22c55e"
+
+    def test_pnl_color_negative(self):
+        from trade_monitor import _pnl_color
+        assert _pnl_color(-0.5) == "#ef4444"
+
+    def test_pnl_color_zero(self):
+        from trade_monitor import _pnl_color
+        assert _pnl_color(0.0)  == "#94a3b8"
+
+    def test_status_chip_active(self):
+        from trade_monitor import _status_chip
+        html = _status_chip("ACTIVE")
+        assert "ACTIVE" in html
+        assert "#22d3ee" in html
+
+    def test_status_chip_tp_hit(self):
+        from trade_monitor import _status_chip
+        html = _status_chip("TP_HIT")
+        assert "TP_HIT" in html
+
+    def test_status_chip_unknown(self):
+        from trade_monitor import _status_chip
+        html = _status_chip("UNKNOWN")
+        assert "UNKNOWN" in html
+
+    def test_dir_color_long(self):
+        from trade_monitor import _dir_color
+        assert _dir_color("Long")  == "#22c55e"
+
+    def test_dir_color_short(self):
+        from trade_monitor import _dir_color
+        assert _dir_color("Short") == "#ef4444"
+
+    def test_dir_color_neutral(self):
+        from trade_monitor import _dir_color
+        assert _dir_color("Neutral") == "#fbbf24"
+
+    def test_range_gauge_mid(self):
+        from trade_monitor import _range_gauge
+        html = _range_gauge(100.0, 90.0, 110.0)
+        assert "50%" in html  # mid point
+
+    def test_range_gauge_zero_range(self):
+        from trade_monitor import _range_gauge
+        html = _range_gauge(100.0, 100.0, 100.0)  # high == low → pct = 0.5
+        assert "%" in html
