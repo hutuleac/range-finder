@@ -240,12 +240,12 @@ def _render_signal_detail(symbol: str, signal_info: dict, grid_info: dict) -> No
     html += "</div>"
 
     # Component bars
-    html += "<div class='sig-bars'>"
+    bar_parts = ["<div class='sig-bars'>"]
     for comp in si["components"]:
         ratio = comp["score"] / comp["max"] if comp["max"] else 0
         pct = int(ratio * 100)
         bc = _bar_color(ratio)
-        html += (
+        bar_parts.append(
             f"<div class='sig-bar-row'>"
             f"<span class='sig-bar-label'>{_html.escape(comp['label'])}</span>"
             f"<div class='sig-bar-bg'><div class='sig-bar-fill' style='width:{pct}%;background:{bc}'></div></div>"
@@ -253,7 +253,8 @@ def _render_signal_detail(symbol: str, signal_info: dict, grid_info: dict) -> No
             f"<span class='sig-bar-detail'>{_html.escape(comp['detail'])}</span>"
             f"</div>"
         )
-    html += "</div>"
+    bar_parts.append("</div>")
+    html += "".join(bar_parts)
 
     # Recommendation box
     rec = _RECS.get(si["signal_type"]["type"], _RECS["NONE"])

@@ -189,13 +189,13 @@ def _render_history(trades: list) -> None:
     import pandas as pd
     df = pd.DataFrame(rows)
 
-    def _pnl_style(val):
+    def _pnl_style(val: int | float | str) -> str:
         if not isinstance(val, (int, float)):
             return ""
-        return f"color:#22c55e;font-weight:700" if val > 0 else f"color:#ef4444;font-weight:700" if val < 0 else ""
+        return "color:#22c55e;font-weight:700" if val > 0 else "color:#ef4444;font-weight:700" if val < 0 else ""
 
-    def _dir_style(val):
-        return ("color:#22c55e" if val == "Long" else "color:#ef4444" if val == "Short" else "color:#fbbf24")
+    def _dir_style(val: str) -> str:
+        return "color:#22c55e" if val == "Long" else "color:#ef4444" if val == "Short" else "color:#fbbf24"
 
     styled = (
         df.style

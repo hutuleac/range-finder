@@ -93,20 +93,22 @@ def _render_alert_summary(assessments: list[dict]) -> None:
     alerts.sort(key=lambda a: {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "NONE": 4}.get(
         a["advice"]["recommendation"]["severity"], 5))
 
-    html = "<div class='portfolio-box' style='border-color:#78350f'>"
-    html += f"<div style='font-size:.72rem;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:.3rem'>Alerts ({len(alerts)})</div>"
+    html_parts = [
+        "<div class='portfolio-box' style='border-color:#78350f'>",
+        f"<div style='font-size:.72rem;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:.3rem'>Alerts ({len(alerts)})</div>",
+    ]
     for a in alerts:
         rec = a["advice"]["recommendation"]
         fg, bg, border = _ACTION_STYLE.get(rec["action"], ("#94a3b8", "#1e293b", "#334155"))
-        html += (
+        html_parts.append(
             f"<div style='display:flex;align-items:center;gap:.5rem;margin:.2rem 0;font-size:.82rem'>"
             f"{_chip(rec['action'].replace('_', ' '), fg, bg)}"
             f"<b style='color:#f1f5f9'>{a['symbol']}</b>"
             f"<span style='color:#94a3b8'>— {_html.escape(rec['reason'])}</span>"
             f"</div>"
         )
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+    html_parts.append("</div>")
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────

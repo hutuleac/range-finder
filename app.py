@@ -471,7 +471,7 @@ def render_symbol(payload: dict, symbol: str) -> None:
     )
 
     # ── Zone 2: Score breakdown — slim rows, status text only ───────
-    bars = "<div style='width:100%;margin:.3rem 0'>"
+    bars_parts = ["<div style='width:100%;margin:.3rem 0'>"]
     for comp in score_info["components"]:
         ratio    = comp["score"] / comp["max"] if comp["max"] else 0
         bc       = comp_bar_color(ratio)
@@ -479,7 +479,7 @@ def render_symbol(payload: dict, symbol: str) -> None:
         full     = ratio >= 1.0
         label_c  = "#6b7280" if full else "#f1f5f9"
         detail_c = "#6b7280" if full else "#cbd5e1"
-        bars += (
+        bars_parts.append(
             f"<div style='margin:.18rem 0'>"
             f"<div style='display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap'>"
             f"<span style='color:{label_c};font-size:.80rem'>{comp['label']}</span>"
@@ -489,9 +489,10 @@ def render_symbol(payload: dict, symbol: str) -> None:
             f"<div style='width:{pct}%;height:100%;border-radius:2px;background:{bc}'></div></div>"
             f"</div>"
         )
-    bars += "</div>"
+    bars_parts.append("</div>")
     for r in score_info.get("recs", []):
-        bars += f"<div style='font-size:.74rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>"
+        bars_parts.append(f"<div style='font-size:.74rem;color:#fbbf24;margin:.1rem 0'>▸ {r}</div>")
+    bars = "".join(bars_parts)
     if bars:
         st.markdown(bars, unsafe_allow_html=True)
 
