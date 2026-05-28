@@ -1,0 +1,46 @@
+[
+  {
+    "buOrderId": "test-bot-btc-001",
+    "base": "BTC",
+    "quote": "USDT",
+    "buOrderType": "spot_grid",
+    "status": "running",
+    "createTime": 1714000000000,
+    "buOrderData": {
+      "upperPrice": "115000",
+      "lowerPrice": "95000",
+      "gridNum": 20,
+      "gridProfit": "12.50",
+      "realizedProfit": "3.00",
+      "quoteInvestment": "500",
+      "baseInvestment": "0",
+      "baseAmount": "0",
+      "quoteAmount": "500",
+      "perVolume": "25",
+      "totalCostInBase": "0",
+      "totalCostInQuote": "500"
+    }
+  },
+  {
+    "buOrderId": "test-bot-eth-002",
+    "base": "ETH",
+    "quote": "USDT",
+    "buOrderType": "spot_grid",
+    "status": "running",
+    "createTime": 1713000000000,
+    "buOrderData": {
+      "upperPrice": "3000",
+      "lowerPrice": "2600",
+      "gridNum": 15,
+      "gridProfit": "2.10",
+      "realizedProfit": "-8.00",
+      "quoteInvestment": "300",
+      "baseInvestment": "0",
+      "baseAmount": "0",
+      "quoteAmount": "300",
+      "perVolume": "20",
+      "totalCostInBase": "0",
+      "totalCostInQuote": "300"
+    }
+  }
+]
