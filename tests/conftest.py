@@ -118,3 +118,55 @@ def mock_bot() -> dict:
         "realizedProfit": "2.0",
         "createTime": int(time.time() * 1000) - 3 * 86_400_000,  # 3 days ago
     }
+
+
+# ── Streamlit AppTest shared fixture ─────────────────────────────────
+
+import json as _json
+from pathlib import Path as _Path
+
+import trade_logger as _tl
+from sqlalchemy import create_engine as _create_engine
+
+
+@pytest.fixture()
+def ui_app(monkeypatch):
+    """Full-integration fixture for AppTest UI tests.
+
+    Seeds in-memory SQLite from captured snapshot, patches refresh_data.main
+    to a no-op, and patches PionexClient to return fixture bots.
+    """
+    # 1. In-memory engines
+    metrics_engine = _create_engine("sqlite:///:memory:", future=True)
+    trades_engine  = _create_engine("sqlite:///:memory:", future=True)
+    _tl.Base.metadata.create_all(metrics_engine)
+    _tl.TradesBase.metadata.create_all(trades_engine)
+    monkeypatch.setattr(_tl, "_engine",        metrics_engine)
+    monkeypatch.setattr(_tl, "_trades_engine", trades_engine)
+
+    # 2. Seed metrics from snapshot
+    snapshot_path = _Path(__file__).parent / "fixtures" / "metrics_snapshot.json"
+    snapshot = _json.loads(snapshot_path.read_text())
+    for row in snapshot:
+        _tl.upsert_metrics(
+            row["symbol"], row["price"], row["score"],
+            row["direction"], row["payload"],
+        )
+
+    # 3. Patch refresh_data.main to no-op
+    import refresh_data as _rd
+    monkeypatch.setattr(_rd, "main", lambda *a, **kw: None)
+
+    # 4. Patch PionexClient
+    import pionex_client as _pc
+    bots_path = _Path(__file__).parent / "fixtures" / "pionex_bots.json"
+    fixture_bots = _json.loads(bots_path.read_text())
+
+    monkeypatch.setattr(_pc.PionexClient, "api_key",    "test-key",    raising=False)
+    monkeypatch.setattr(_pc.PionexClient, "api_secret", "test-secret", raising=False)
+    monkeypatch.setattr(_pc.PionexClient, "list_running_bots",
+                        lambda self: fixture_bots)
+    monkeypatch.setattr(_pc.PionexClient, "get_bot_detail",
+                        lambda self, order_id: fixture_bots[0])
+
+    yield
