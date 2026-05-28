@@ -127,6 +127,7 @@ from pathlib import Path as _Path
 
 import trade_logger as _tl
 from sqlalchemy import create_engine as _create_engine
+from sqlalchemy.pool import StaticPool as _StaticPool
 
 
 @pytest.fixture()
@@ -135,10 +136,26 @@ def ui_app(monkeypatch):
 
     Seeds in-memory SQLite from captured snapshot, patches refresh_data.main
     to a no-op, and patches PionexClient to return fixture bots.
+
+    Uses StaticPool so all SQLAlchemy sessions (including those opened by
+    AppTest inside the same process) share a single SQLite connection and
+    therefore see the seeded data.
     """
-    # 1. In-memory engines
-    metrics_engine = _create_engine("sqlite:///:memory:", future=True)
-    trades_engine  = _create_engine("sqlite:///:memory:", future=True)
+    # 1. Single-connection in-memory engines (StaticPool keeps one connection
+    #    alive and reuses it for every Session — avoids :memory: isolation).
+    connect_args = {"check_same_thread": False}
+    metrics_engine = _create_engine(
+        "sqlite:///:memory:",
+        connect_args=connect_args,
+        poolclass=_StaticPool,
+        future=True,
+    )
+    trades_engine = _create_engine(
+        "sqlite:///:memory:",
+        connect_args=connect_args,
+        poolclass=_StaticPool,
+        future=True,
+    )
     _tl.Base.metadata.create_all(metrics_engine)
     _tl.TradesBase.metadata.create_all(trades_engine)
     monkeypatch.setattr(_tl, "_engine",        metrics_engine)
