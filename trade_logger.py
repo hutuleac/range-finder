@@ -103,6 +103,20 @@ class BotAssessment(Base):
     suggested_duration    = Column(String(32), nullable=True)
 
 
+def as_utc(dt: "datetime | None") -> "datetime | None":
+    """Treat a datetime read from SQLite as UTC.
+
+    SQLite has no native tz storage, so DateTime(timezone=True) columns come
+    back naive even though we always write UTC wall-clock. Calling
+    ``.astimezone()`` or ``.timestamp()`` on a naive value makes Python assume
+    *local* time, shifting it by the host's UTC offset. Tag naive values as UTC
+    instead of misinterpreting them.
+    """
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
 def init_db() -> None:
     Base.metadata.create_all(_engine)
 

@@ -15,6 +15,7 @@ from data_fetcher import fetch_klines
 from grid_calculator import calc_grid_stop_loss, calc_grid_take_profit
 from trade_logger import (
     SimulatedTrade,
+    as_utc,
     close_simulated_trade,
     create_simulated_trade,
     get_active_trades,
@@ -215,7 +216,7 @@ def update_simulation(trade_id: int) -> dict:
 
     # Throttle: don't re-simulate if updated recently
     if trade.last_simulated_at is not None:
-        age = (datetime.now(timezone.utc) - trade.last_simulated_at.astimezone(timezone.utc)).total_seconds()
+        age = (datetime.now(timezone.utc) - as_utc(trade.last_simulated_at)).total_seconds()
         if age < _THROTTLE_SEC:
             return {"status": "throttled", "age_sec": int(age), "new_fills": 0}
 
@@ -227,7 +228,7 @@ def update_simulation(trade_id: int) -> dict:
     last_ts = (
         trade.last_candle_ts
         if trade.last_candle_ts is not None
-        else trade.opened_at.timestamp() * 1000
+        else as_utc(trade.opened_at).timestamp() * 1000
     )
     new_candles = [r for r in raw if float(r[0]) > last_ts]
     if not new_candles:

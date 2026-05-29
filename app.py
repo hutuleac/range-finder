@@ -19,6 +19,7 @@ from signal_scanner import render_signal_scanner
 from trade_logger import (
     add_user_pair,
     all_latest,
+    as_utc,
     get_user_pairs,
     init_db,
     latest_metrics,
@@ -390,7 +391,7 @@ with st.sidebar:
     rows = all_latest()
     last_ts = max((r.updated_at for r in rows), default=None)
     if last_ts:
-        delta = (datetime.now(timezone.utc) - last_ts.astimezone(timezone.utc)).total_seconds()
+        delta = (datetime.now(timezone.utc) - as_utc(last_ts)).total_seconds()
         age_color = "green" if delta < CFG["CACHE_FRESH_S"] else "orange" if delta < CFG["CACHE_STALE_S"] else "red"
         st.markdown(
             f"Cache age: <span style='color:{age_color};font-weight:600'>{int(delta)}s</span>"

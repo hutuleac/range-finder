@@ -9,7 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 import trade_logger as tl
-from bot_monitor_loop import run_bot_monitor_cycle
+import bot_monitor_loop as bml
+from bot_monitor_loop import _flatten_bot, _resolve_symbol, run_bot_monitor_cycle
 
 
 @pytest.fixture(autouse=True)
@@ -123,3 +124,93 @@ class TestRunBotMonitorCycle:
         assert row.suggested_range_low is not None
         assert row.suggested_range_high is not None
         assert row.suggested_grid_count is not None
+
+
+def _configured_client(bots):
+    """Build a patched PionexClient context returning the given bots."""
+    mock = patch("bot_monitor_loop.PionexClient")
+    return mock, bots
+
+
+class TestResolveSymbol:
+    def test_prefers_base_quote_fields(self):
+        assert _resolve_symbol({"base": "ETH", "quote": "USDT"}) == "ETH/USDT"
+
+    @pytest.mark.parametrize("symbol,expected", [
+        ("BTCUSDT", "BTC/USDT"),
+        ("ETHBTC", "ETH/BTC"),
+        ("SOLUSD", "SOL/USD"),
+    ], ids=["usdt", "btc-quote", "usd"])
+    def test_splits_symbol_suffix_when_no_base_quote(self, symbol, expected):
+        assert _resolve_symbol({"symbol": symbol}) == expected
+
+    def test_returns_raw_symbol_when_unrecognised(self):
+        assert _resolve_symbol({"symbol": "WEIRDPAIR"}) == "WEIRDPAIR"
+
+
+class TestFlattenBot:
+    def test_uses_top_bottom_row_aliases(self):
+        raw = {"buOrderData": {"top": "110", "bottom": "90", "row": 15}}
+        bot = _flatten_bot(raw)
+        assert bot["upperPrice"] == "110"
+        assert bot["lowerPrice"] == "90"
+        assert bot["gridNum"] == 15
+
+    def test_top_level_values_take_precedence(self):
+        raw = {"upperPrice": "999", "buOrderData": {"upperPrice": "110", "top": "120"}}
+        assert _flatten_bot(raw)["upperPrice"] == "999"
+
+
+class TestCycleEdgeCases:
+    def test_list_bots_exception_returns_empty(self):
+        with patch("bot_monitor_loop.PionexClient") as MockClient:
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.side_effect = RuntimeError("api down")
+            assert run_bot_monitor_cycle({"BTC/USDT": _fake_payload()}) == []
+
+    def test_bot_without_id_is_skipped(self):
+        bot = _fake_bot()
+        bot["buOrderId"] = ""
+        with patch("bot_monitor_loop.PionexClient") as MockClient:
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.return_value = [bot]
+            assert run_bot_monitor_cycle({"BTC/USDT": _fake_payload()}) == []
+
+    def test_skips_when_no_curr_close(self):
+        payload = _fake_payload()
+        payload["metrics"]["currClose"] = 0.0
+        with patch("bot_monitor_loop.PionexClient") as MockClient:
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.return_value = [_fake_bot()]
+            result = run_bot_monitor_cycle({"BTC/USDT": payload})
+        assert result == []
+        # snapshot not written because currClose check precedes it
+        assert tl.get_open_snapshot("bot-001") is None
+
+    def test_assess_failure_skips_bot(self):
+        with patch("bot_monitor_loop.PionexClient") as MockClient, \
+             patch("bot_monitor_loop.assess_bot_health", side_effect=ValueError("bad")):
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.return_value = [_fake_bot()]
+            result = run_bot_monitor_cycle({"BTC/USDT": _fake_payload()})
+        assert result == []
+        assert tl.get_bot_assessments("bot-001") == []
+
+    def test_no_restart_leaves_suggested_params_none(self):
+        with patch("bot_monitor_loop.PionexClient") as MockClient, \
+             patch("bot_monitor_loop._build_restart", return_value=None):
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.return_value = [_fake_bot()]
+            run_bot_monitor_cycle({"BTC/USDT": _fake_payload()})
+        row = tl.get_bot_assessments("bot-001")[0]
+        assert row.suggested_range_low is None
+        assert row.suggested_stop_loss is None
+        assert row.suggested_grid_count is None
+
+    def test_save_assessment_failure_skips_bot(self):
+        with patch("bot_monitor_loop.PionexClient") as MockClient, \
+             patch("bot_monitor_loop.save_bot_assessment", side_effect=RuntimeError("db")):
+            MockClient.return_value.configured = True
+            MockClient.return_value.list_running_bots.return_value = [_fake_bot()]
+            result = run_bot_monitor_cycle({"BTC/USDT": _fake_payload()})
+        assert result == []

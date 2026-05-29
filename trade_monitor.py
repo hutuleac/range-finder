@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import plotly.graph_objects as go
 import streamlit as st
 
-from trade_logger import get_all_simulated_trades, get_trade_fills
+from trade_logger import as_utc, get_all_simulated_trades, get_trade_fills
 from trade_simulator import (
     build_grid_levels,
     calc_pnl,
@@ -26,7 +26,7 @@ from trade_simulator import (
 def _age_str(dt: datetime | None) -> str:
     if dt is None:
         return "—"
-    delta = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
+    delta = datetime.now(timezone.utc) - as_utc(dt)
     h = int(delta.total_seconds() // 3600)
     d = h // 24
     return f"{d}d {h % 24}h" if d else f"{h}h {int((delta.total_seconds() % 3600) // 60)}m"
@@ -167,7 +167,7 @@ def _render_history(trades: list) -> None:
         final_pnl_usd = sum(f.pnl_usd for f in fills if f.action == "SELL" and f.pnl_usd) if t.capital else None
 
         if t.closed_at and t.opened_at:
-            secs = (t.closed_at.astimezone(timezone.utc) - t.opened_at.astimezone(timezone.utc)).total_seconds()
+            secs = (as_utc(t.closed_at) - as_utc(t.opened_at)).total_seconds()
             h = int(secs // 3600); d = h // 24
             duration = f"{d}d {h%24}h" if d else f"{h}h"
         else:

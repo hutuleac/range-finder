@@ -318,3 +318,30 @@ class TestBotPersistence:
             save_bot_assessment(a)
         all_rows = get_bot_assessments("bot-006", limit=100)
         assert len(all_rows) == 50
+
+
+# ── as_utc — normalise naive DB datetimes ─────────────────────────────
+
+class TestAsUtc:
+    def test_none_passes_through(self):
+        from trade_logger import as_utc
+        assert as_utc(None) is None
+
+    def test_naive_tagged_as_utc_not_local(self):
+        """A naive value (as SQLite returns) must be treated as the same
+        wall-clock in UTC, never shifted by the host's local offset."""
+        from datetime import datetime, timezone
+        from trade_logger import as_utc
+        naive = datetime(2026, 5, 30, 12, 0, 0)
+        out = as_utc(naive)
+        assert out.tzinfo is timezone.utc
+        assert (out.year, out.hour) == (2026, 12)  # unchanged wall-clock
+
+    def test_aware_converted_to_utc(self):
+        from datetime import datetime, timedelta, timezone
+        from trade_logger import as_utc
+        plus2 = timezone(timedelta(hours=2))
+        aware = datetime(2026, 5, 30, 12, 0, 0, tzinfo=plus2)
+        out = as_utc(aware)
+        assert out.tzinfo is timezone.utc
+        assert out.hour == 10  # 12:00+02:00 == 10:00 UTC

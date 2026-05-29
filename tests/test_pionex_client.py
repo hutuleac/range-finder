@@ -4,6 +4,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from pionex_client import PionexClient
 
@@ -165,7 +166,7 @@ class TestValidateSymbol:
         client = PionexClient()
         assert client.validate_symbol("UNKNOWN/USD") is False
 
-    @patch("pionex_client.requests.get", side_effect=Exception("timeout"))
+    @patch("pionex_client.requests.get", side_effect=requests.Timeout("timeout"))
     def test_returns_none_on_network_error(self, mock_get):
         client = PionexClient()
         assert client.validate_symbol("TSLAX/USD") is None
