@@ -9,7 +9,7 @@ import streamlit as st
 from bot_advisor import assess_bot_health
 from pionex_client import PionexClient
 from telegram_alerts import is_configured as tg_configured, send_bot_alert
-from trade_logger import get_bot_assessments, get_open_snapshot
+from trade_logger import get_bot_assessments, get_last_assessment_time, get_open_snapshot
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -318,9 +318,21 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str, snap=N
 def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
+    last_poll = get_last_assessment_time()
+    if last_poll is not None:
+        poll_str = _time_ago(last_poll)
+        poll_html = (
+            f"Bot Monitor — Active Pionex Grid Bots"
+            f"&ensp;<span style='color:#22c55e;font-weight:400'>● polled {poll_str} ago</span>"
+        )
+    else:
+        poll_html = (
+            "Bot Monitor — Active Pionex Grid Bots"
+            "&ensp;<span style='color:#475569;font-weight:400'>● awaiting first poll</span>"
+        )
     st.markdown(
-        "<div style='font-size:.72rem;color:#64748b;letter-spacing:.6px;text-transform:uppercase;"
-        "margin-bottom:.5rem'>Bot Monitor — Active Pionex Grid Bots</div>",
+        f"<div style='font-size:.72rem;color:#64748b;letter-spacing:.6px;text-transform:uppercase;"
+        f"margin-bottom:.5rem'>{poll_html}</div>",
         unsafe_allow_html=True,
     )
 
@@ -383,7 +395,7 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
         if not metrics.get("currClose"):
             continue
 
-        bot_id = raw_bot.get("botId") or raw_bot.get("id", "")
+        bot_id = raw_bot.get("buOrderId", "")
         snap    = get_open_snapshot(bot_id) if bot_id else None
         history = get_bot_assessments(bot_id, limit=5) if bot_id else []
 

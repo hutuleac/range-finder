@@ -393,3 +393,14 @@ def get_bot_assessments(bot_id: str, limit: int = 10) -> list[BotAssessment]:
             .order_by(BotAssessment.assessed_at.desc())
             .limit(limit)
         ).scalars().all()
+
+
+def get_last_assessment_time() -> "datetime | None":
+    """Return the most recent assessed_at timestamp across all bots, or None."""
+    from datetime import datetime  # avoid circular at module level
+    with Session(_engine, future=True) as s:
+        return s.execute(
+            select(BotAssessment.assessed_at)
+            .order_by(BotAssessment.assessed_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
