@@ -16,7 +16,14 @@ from grid_calculator import (
 from refresh_data import refresh_one
 from bot_monitor import render_bot_monitor
 from signal_scanner import render_signal_scanner
-from trade_logger import all_latest, init_db, latest_metrics
+from trade_logger import (
+    add_user_pair,
+    all_latest,
+    get_user_pairs,
+    init_db,
+    latest_metrics,
+    remove_user_pair,
+)
 from trade_monitor import render_trade_monitor
 from trade_simulator import open_trade
 
@@ -126,6 +133,25 @@ _start_scheduler()
 # ─────────────────────────────────────────────────────────────────────
 def chip(text: str, kind: str = "green") -> str:
     return f'<span class="chip chip-{kind}">{text}</span>'
+
+
+def _normalise_pair(raw: str) -> tuple[str, str]:
+    """Normalise user input to (symbol, pair_type).
+
+    Rules:
+      - Strip whitespace, uppercase
+      - If already has '/': detect type from quote (USD=stock, else crypto)
+      - If token is ≥5 chars and ends in 'X' and no '/': append '/USD' → stock
+        (tokenized stocks: TSLAX, AAPLX, MSFTX — 5 chars each)
+      - Otherwise: append '/USDT' → crypto
+    """
+    sym = raw.strip().upper()
+    if "/" in sym:
+        pair_type = "stock" if sym.endswith("/USD") else "crypto"
+        return sym, pair_type
+    if len(sym) >= 5 and sym.endswith("X"):
+        return f"{sym}/USD", "stock"
+    return f"{sym}/USDT", "crypto"
 
 
 def colored(text: str, cls: str) -> str:
@@ -266,10 +292,57 @@ def mblock(label: str, value: str, color: str = "#f1f5f9") -> str:
 with st.sidebar:
 
 
+    # ── Pair selector ────────────────────────────────────────────────
+    _custom = get_user_pairs()
+    _options = DEFAULT_PAIRS + [p for p in _custom if p not in DEFAULT_PAIRS]
     selected = st.multiselect(
-        "Watched pairs", DEFAULT_PAIRS, default=DEFAULT_PAIRS,
-        help="USDT perpetuals. HYPE/SUI fall back to Bybit automatically.",
+        "Watched pairs", _options, default=_options,
+        help="USDT perpetuals. Deselect a custom pair to remove it permanently.",
     )
+    # Remove any custom pair the user deselected
+    _removed = set(_custom) - set(selected)
+    if _removed:
+        for _sym in _removed:
+            remove_user_pair(_sym)
+        st.rerun()
+
+    # ── Add custom pair ──────────────────────────────────────────────
+    _col1, _col2 = st.columns([3, 1])
+    _new_raw = _col1.text_input(
+        "Add pair",
+        placeholder="LINK or TSLAX",
+        label_visibility="collapsed",
+        key="add_pair_input",
+    )
+    if _col2.button("Add", use_container_width=True, key="add_pair_btn"):
+        if _new_raw.strip():
+            _sym, _ptype = _normalise_pair(_new_raw)
+            if _sym in _options:
+                st.info(f"{_sym} is already in your list.")
+            else:
+                with st.spinner(f"Validating {_sym}…"):
+                    if _ptype == "stock":
+                        from pionex_client import PionexClient as _PC
+                        _result = _PC().validate_symbol(_sym)
+                    else:
+                        from data_fetcher import validate_pair as _vp
+                        _result = True if _vp(_sym) else False
+                if _ptype == "stock":
+                    if _result is True:
+                        add_user_pair(_sym, _ptype)
+                        st.rerun()
+                    elif _result is None:
+                        st.warning("Could not reach Pionex — saved anyway.")
+                        add_user_pair(_sym, _ptype)
+                        st.rerun()
+                    else:
+                        st.error(f"{_sym} not found on Pionex.")
+                else:
+                    if _result:
+                        add_user_pair(_sym, _ptype)
+                        st.rerun()
+                    else:
+                        st.error(f"{_sym} not found on OKX/Bybit.")
     capital = st.number_input(
         "Capital per bot (USDT)", min_value=50.0, max_value=100_000.0,
         value=float(GRID_CONFIG["DEFAULT_CAPITAL"]), step=50.0,

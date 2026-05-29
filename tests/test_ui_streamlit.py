@@ -297,3 +297,39 @@ class TestTradeMonitorHelpers:
         from trade_monitor import _range_gauge
         html = _range_gauge(100.0, 100.0, 100.0)  # high == low → pct = 0.5
         assert "%" in html
+
+
+class TestNormalisePair:
+    """Unit tests for the pure _normalise_pair helper in app.py."""
+
+    def _norm(self, raw: str):
+        from app import _normalise_pair
+        return _normalise_pair(raw)
+
+    def test_plain_crypto_token_gets_usdt(self):
+        sym, kind = self._norm("link")
+        assert sym == "LINK/USDT"
+        assert kind == "crypto"
+
+    def test_explicit_crypto_pair_unchanged(self):
+        sym, kind = self._norm("AVAX/USDT")
+        assert sym == "AVAX/USDT"
+        assert kind == "crypto"
+
+    def test_stock_token_ending_x_gets_usd(self):
+        sym, kind = self._norm("tslax")
+        assert sym == "TSLAX/USD"
+        assert kind == "stock"
+
+    def test_explicit_stock_pair_unchanged(self):
+        sym, kind = self._norm("AAPLX/USD")
+        assert sym == "AAPLX/USD"
+        assert kind == "stock"
+
+    def test_strips_whitespace(self):
+        sym, kind = self._norm("  avax  ")
+        assert sym == "AVAX/USDT"
+
+    def test_quote_usd_detected_as_stock(self):
+        sym, kind = self._norm("MSFTX/USD")
+        assert kind == "stock"
