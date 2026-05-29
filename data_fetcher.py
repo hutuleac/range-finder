@@ -282,3 +282,15 @@ def fetch_funding(symbol: str) -> float:
 def fetch_pionex_balance() -> dict:
     """Stub — real implementation lands in phases/phase4_pionex_monitor.py."""
     return {"stub": True, "balances": [], "bots": []}
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  Pair validation
+# ─────────────────────────────────────────────────────────────────────
+def validate_pair(symbol: str) -> bool:
+    """Return True if the exchange returns at least one candle for this symbol."""
+    try:
+        rows = fetch_klines(symbol, "4h", limit=1)
+        return len(rows) > 0
+    except Exception:
+        return False
