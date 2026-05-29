@@ -333,3 +333,42 @@ class TestNormalisePair:
     def test_quote_usd_detected_as_stock(self):
         sym, kind = self._norm("MSFTX/USD")
         assert kind == "stock"
+
+
+class TestCustomPairs:
+    """Verify custom pairs appear in the sidebar multiselect."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, ui_app):
+        pass  # activates ui_app for every test
+
+    def _run(self) -> AppTest:
+        at = AppTest.from_file(APP_PATH, default_timeout=TIMEOUT)
+        at.run()
+        return at
+
+    def test_custom_crypto_pair_appears_in_options(self):
+        import trade_logger as tl
+        tl.add_user_pair("LINK/USDT", "crypto")
+
+        at = self._run()
+        assert not at.exception
+        options = at.sidebar.multiselect[0].options
+        assert "LINK/USDT" in options
+
+    def test_custom_stock_pair_appears_in_options(self):
+        import trade_logger as tl
+        tl.add_user_pair("TSLAX/USD", "stock")
+
+        at = self._run()
+        assert not at.exception
+        options = at.sidebar.multiselect[0].options
+        assert "TSLAX/USD" in options
+
+    def test_no_custom_pairs_shows_only_defaults(self):
+        from config import DEFAULT_PAIRS
+        at = self._run()
+        assert not at.exception
+        options = at.sidebar.multiselect[0].options
+        for pair in DEFAULT_PAIRS:
+            assert pair in options
