@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import html as _html
+from datetime import datetime, timezone
 
 import streamlit as st
 
 from bot_advisor import assess_bot_health
 from pionex_client import PionexClient
 from telegram_alerts import is_configured as tg_configured, send_bot_alert
+from trade_logger import get_bot_assessments, get_open_snapshot
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -57,6 +59,11 @@ _CSS = """
   background:#0f1117; margin-bottom:.8rem;
   font-family: 'JetBrains Mono', monospace;
 }
+.bot-section-label {
+  font-size:.68rem; color:#475569; text-transform:uppercase; letter-spacing:.5px;
+  margin:.55rem 0 .2rem;
+}
+.bot-history { display:flex; gap:.35rem; flex-wrap:wrap; margin:.2rem 0; }
 </style>
 """
 
@@ -74,6 +81,20 @@ def _pnl_color(val: float) -> str:
 
 def _pionex_symbol_to_pair(sym: str) -> str:
     return sym.replace("_", "/") if "_" in sym else sym
+
+
+def _time_ago(dt: datetime | None) -> str:
+    if dt is None:
+        return "?"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    diff = int((now - dt).total_seconds())
+    if diff < 3600:
+        return f"{max(diff // 60, 1)}m"
+    if diff < 86400:
+        return f"{diff // 3600}h"
+    return f"{diff // 86400}d"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -142,7 +163,7 @@ def _render_portfolio_summary(assessments: list[dict], bot_count: int) -> None:
 # ─────────────────────────────────────────────────────────────────────
 #  Bot card
 # ─────────────────────────────────────────────────────────────────────
-def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str) -> None:
+def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str, snap=None, history=None) -> None:
     rec = advice["recommendation"]
     pos = advice["position"]
     profit = advice["profit"]
@@ -210,6 +231,46 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str) -> Non
         html += _chip(f"Setup {setup_score:.1f}", ss_c, f"{ss_c}18")
     html += "</div>"
 
+    # At-open indicators (from BotOpenSnapshot)
+    if snap is not None:
+        try:
+            o_adx  = snap.open_adx
+            o_rsi  = snap.open_rsi
+            o_bb   = snap.open_bb_bw
+            o_gs   = snap.open_grid_score
+            o_ss   = snap.open_setup_score
+            o_low  = snap.open_range_low
+            o_high = snap.open_range_high
+            o_grids = snap.open_grid_count
+
+            label = "<div class='bot-section-label'>At Open"
+            if o_low and o_high:
+                label += f" · {o_low:,.4f}–{o_high:,.4f}"
+                if o_grids:
+                    label += f" · {o_grids}g"
+            label += "</div>"
+            html += label
+
+            html += "<div class='bot-indicators'>"
+            if o_adx is not None:
+                c = "#ef4444" if o_adx > 28 else "#fbbf24" if o_adx > 25 else "#22c55e"
+                html += _chip(f"ADX {o_adx:.1f}", c, f"{c}18")
+            if o_rsi is not None:
+                c = "#ef4444" if o_rsi > 70 or o_rsi < 30 else "#fbbf24" if o_rsi > 62 or o_rsi < 35 else "#94a3b8"
+                html += _chip(f"RSI {o_rsi:.1f}", c, f"{c}18")
+            if o_bb is not None:
+                c = "#22d3ee" if o_bb < 5 else "#94a3b8" if o_bb < 12 else "#fbbf24"
+                html += _chip(f"BB {o_bb:.1f}%", c, f"{c}18")
+            if o_gs is not None:
+                c = "#22c55e" if o_gs >= 8 else "#84cc16" if o_gs >= 6 else "#fbbf24"
+                html += _chip(f"Grid {o_gs:.1f}", c, f"{c}18")
+            if o_ss is not None:
+                c = "#22c55e" if o_ss >= 7.5 else "#fbbf24" if o_ss >= 5 else "#94a3b8"
+                html += _chip(f"Setup {o_ss:.1f}", c, f"{c}18")
+            html += "</div>"
+        except Exception:
+            pass
+
     # Alert box
     html += (
         f"<div class='bot-alert' style='background:{bg};border:1px solid {border}'>"
@@ -234,6 +295,18 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str) -> Non
             f"</div>"
             "</div>"
         )
+
+    # Assessment history (last 5 polls)
+    if history:
+        try:
+            html += "<div class='bot-section-label'>Recent Assessments</div>"
+            html += "<div class='bot-history'>"
+            for h in history[:5]:
+                fg2, bg2, _ = _ACTION_STYLE.get(h.action, ("#94a3b8", "#1e293b", "#334155"))
+                html += _chip(f"{_time_ago(h.assessed_at)} {h.action.replace('_', ' ')}", fg2, bg2)
+            html += "</div>"
+        except Exception:
+            pass
 
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
@@ -310,8 +383,15 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
         if not metrics.get("currClose"):
             continue
 
+        bot_id = raw_bot.get("botId") or raw_bot.get("id", "")
+        snap    = get_open_snapshot(bot_id) if bot_id else None
+        history = get_bot_assessments(bot_id, limit=5) if bot_id else []
+
         advice = assess_bot_health(bot, metrics, signal_info, symbol=pair)
-        assessments.append({"bot": bot, "metrics": metrics, "advice": advice, "symbol": pair})
+        assessments.append({
+            "bot": bot, "metrics": metrics, "advice": advice,
+            "symbol": pair, "snap": snap, "history": history,
+        })
 
     if not assessments:
         st.warning("Active bots found but no matching cached metrics. Press Refresh to fetch market data.")
@@ -341,4 +421,5 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
 
     # Bot cards
     for a in assessments:
-        _render_bot_card(a["bot"], a["metrics"], a["advice"], a["symbol"])
+        _render_bot_card(a["bot"], a["metrics"], a["advice"], a["symbol"],
+                         snap=a.get("snap"), history=a.get("history"))
