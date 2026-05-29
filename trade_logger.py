@@ -59,6 +59,50 @@ class UserPair(Base):
     added_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class BotOpenSnapshot(Base):
+    """One row per bot — captured on first detection. Never overwritten."""
+    __tablename__ = "bot_open_snapshots"
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    bot_id           = Column(String(64), unique=True, nullable=False, index=True)
+    symbol           = Column(String(32), nullable=False)
+    captured_at      = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    open_range_low   = Column(Float, nullable=True)
+    open_range_high  = Column(Float, nullable=True)
+    open_grid_count  = Column(Integer, nullable=True)
+    open_created_ms  = Column(Float, nullable=True)
+    open_adx         = Column(Float, nullable=True)
+    open_rsi         = Column(Float, nullable=True)
+    open_bb_bw       = Column(Float, nullable=True)
+    open_grid_score  = Column(Float, nullable=True)
+    open_setup_score = Column(Float, nullable=True)
+
+
+class BotAssessment(Base):
+    """One row per 10-min poll per bot. Pruned to last 50 per bot_id."""
+    __tablename__ = "bot_assessments"
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    bot_id       = Column(String(64), nullable=False, index=True)
+    symbol       = Column(String(32), nullable=False)
+    assessed_at  = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    action       = Column(String(16), nullable=False)
+    severity     = Column(String(8),  nullable=False, default="NONE")
+    reason       = Column(String(256), nullable=True)
+    price        = Column(Float, nullable=True)
+    price_pct    = Column(Float, nullable=True)
+    adx          = Column(Float, nullable=True)
+    rsi          = Column(Float, nullable=True)
+    bb_bw        = Column(Float, nullable=True)
+    grid_score   = Column(Float, nullable=True)
+    setup_score  = Column(Float, nullable=True)
+    suggested_range_low   = Column(Float, nullable=True)
+    suggested_range_high  = Column(Float, nullable=True)
+    suggested_grid_count  = Column(Integer, nullable=True)
+    suggested_stop_loss   = Column(Float, nullable=True)
+    suggested_take_profit = Column(Float, nullable=True)
+    suggested_grid_mode   = Column(String(16), nullable=True)
+    suggested_duration    = Column(String(32), nullable=True)
+
+
 def init_db() -> None:
     Base.metadata.create_all(_engine)
 
@@ -296,3 +340,56 @@ def remove_user_pair(symbol: str) -> None:
         if row is not None:
             s.delete(row)
             s.commit()
+
+
+# ── Bot monitoring persistence ────────────────────────────────────────────────
+
+def save_open_snapshot(snapshot: BotOpenSnapshot) -> None:
+    """Insert open snapshot if this bot_id has not been seen before."""
+    bot_id = snapshot.bot_id  # read before entering session to avoid DetachedInstanceError
+    with Session(_engine, future=True) as s:
+        existing = s.execute(
+            select(BotOpenSnapshot).where(BotOpenSnapshot.bot_id == bot_id)
+        ).scalar_one_or_none()
+        if existing is None:
+            s.merge(snapshot)
+            s.commit()
+
+
+def get_open_snapshot(bot_id: str) -> BotOpenSnapshot | None:
+    with Session(_engine, future=True) as s:
+        return s.execute(
+            select(BotOpenSnapshot).where(BotOpenSnapshot.bot_id == bot_id)
+        ).scalar_one_or_none()
+
+
+def save_bot_assessment(assessment: BotAssessment) -> None:
+    """Insert assessment row and prune to keep last 50 per bot_id."""
+    with Session(_engine, future=True) as s:
+        s.add(assessment)
+        s.commit()
+        keep_ids = s.execute(
+            select(BotAssessment.id)
+            .where(BotAssessment.bot_id == assessment.bot_id)
+            .order_by(BotAssessment.assessed_at.desc())
+            .limit(50)
+        ).scalars().all()
+        if keep_ids:
+            s.execute(
+                BotAssessment.__table__.delete().where(
+                    BotAssessment.bot_id == assessment.bot_id,
+                    BotAssessment.id.not_in(keep_ids),
+                )
+            )
+            s.commit()
+
+
+def get_bot_assessments(bot_id: str, limit: int = 10) -> list[BotAssessment]:
+    """Return last N assessments for a bot, newest first."""
+    with Session(_engine, future=True) as s:
+        return s.execute(
+            select(BotAssessment)
+            .where(BotAssessment.bot_id == bot_id)
+            .order_by(BotAssessment.assessed_at.desc())
+            .limit(limit)
+        ).scalars().all()

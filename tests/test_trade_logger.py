@@ -6,6 +6,8 @@ from sqlalchemy import create_engine
 
 import trade_logger as tl
 from trade_logger import (
+    BotAssessment,
+    BotOpenSnapshot,
     MetricsCache,
     SimulatedTrade,
     add_user_pair,
@@ -14,11 +16,15 @@ from trade_logger import (
     create_simulated_trade,
     get_active_trades,
     get_all_simulated_trades,
+    get_bot_assessments,
+    get_open_snapshot,
     get_simulated_trade,
     get_trade_fills,
     get_user_pairs,
     latest_metrics,
     remove_user_pair,
+    save_bot_assessment,
+    save_open_snapshot,
     save_simulation_update,
     upsert_metrics,
 )
@@ -247,3 +253,68 @@ class TestUserPairs:
         add_user_pair("AVAX/USDT", "crypto")
         pairs = get_user_pairs()
         assert pairs.index("LINK/USDT") < pairs.index("AVAX/USDT")
+
+
+# ── BotOpenSnapshot + BotAssessment ──────────────────────────────────────────
+
+class TestBotPersistence:
+    def test_save_open_snapshot_creates_row(self):
+        snap = BotOpenSnapshot(
+            bot_id="bot-001", symbol="BTC/USDT",
+            open_range_low=90_000.0, open_range_high=110_000.0,
+            open_grid_count=20, open_created_ms=1_700_000_000_000.0,
+            open_adx=18.0, open_rsi=52.0, open_bb_bw=6.5,
+            open_grid_score=7.5, open_setup_score=3.2,
+        )
+        save_open_snapshot(snap)
+        fetched = get_open_snapshot("bot-001")
+        assert fetched is not None
+        assert fetched.symbol == "BTC/USDT"
+        assert fetched.open_range_low == pytest.approx(90_000.0)
+
+    def test_save_open_snapshot_is_idempotent(self):
+        snap = BotOpenSnapshot(bot_id="bot-002", symbol="ETH/USDT",
+                                open_adx=20.0, open_rsi=50.0, open_bb_bw=5.0,
+                                open_grid_score=6.0, open_setup_score=2.0)
+        save_open_snapshot(snap)
+        save_open_snapshot(snap)
+        assert get_open_snapshot("bot-002") is not None
+
+    def test_get_open_snapshot_returns_none_for_unknown(self):
+        assert get_open_snapshot("nonexistent-bot") is None
+
+    def _make_assessment(self, bot_id: str, action: str = "HOLD") -> BotAssessment:
+        return BotAssessment(
+            bot_id=bot_id, symbol="BTC/USDT", action=action,
+            severity="NONE", reason="test",
+            price=100_000.0, price_pct=50.0,
+            adx=18.0, rsi=52.0, bb_bw=6.5,
+            grid_score=7.5, setup_score=3.2,
+        )
+
+    def test_save_and_get_assessment(self):
+        save_bot_assessment(self._make_assessment("bot-003"))
+        rows = get_bot_assessments("bot-003")
+        assert len(rows) == 1
+        assert rows[0].action == "HOLD"
+
+    def test_get_assessments_ordered_newest_first(self):
+        for action in ["HOLD", "WARNING", "CLOSE_NOW"]:
+            save_bot_assessment(self._make_assessment("bot-004", action))
+        rows = get_bot_assessments("bot-004")
+        assert rows[0].action == "CLOSE_NOW"
+        assert rows[-1].action == "HOLD"
+
+    def test_get_assessments_respects_limit(self):
+        for _ in range(5):
+            save_bot_assessment(self._make_assessment("bot-005"))
+        rows = get_bot_assessments("bot-005", limit=3)
+        assert len(rows) == 3
+
+    def test_prune_keeps_last_50(self):
+        for i in range(55):
+            a = self._make_assessment("bot-006")
+            a.reason = f"cycle-{i}"
+            save_bot_assessment(a)
+        all_rows = get_bot_assessments("bot-006", limit=100)
+        assert len(all_rows) == 50
