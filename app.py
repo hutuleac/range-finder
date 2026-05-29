@@ -113,6 +113,15 @@ def _start_scheduler():
         except Exception:  # noqa: BLE001
             logging.getLogger("pyonex.scheduler").exception("background refresh failed")
 
+    def _bg_bot_monitor():
+        try:
+            from bot_monitor_loop import run_bot_monitor_cycle
+            from trade_logger import all_latest as _all_latest
+            _payloads = {r.symbol: r.payload for r in _all_latest()}
+            run_bot_monitor_cycle(_payloads)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("pyonex.scheduler").exception("bot monitor cycle failed")
+
     sched = BackgroundScheduler(daemon=True)
     sched.add_job(
         _bg_refresh, "interval",
@@ -120,6 +129,13 @@ def _start_scheduler():
         id="bg_refresh",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc),  # fire immediately on startup
+    )
+    sched.add_job(
+        _bg_bot_monitor, "interval",
+        seconds=600,
+        id="bg_bot_monitor",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
     )
     sched.start()
     return sched
