@@ -8,6 +8,7 @@ import trade_logger as tl
 from trade_logger import (
     MetricsCache,
     SimulatedTrade,
+    add_user_pair,
     all_latest,
     close_simulated_trade,
     create_simulated_trade,
@@ -15,7 +16,9 @@ from trade_logger import (
     get_all_simulated_trades,
     get_simulated_trade,
     get_trade_fills,
+    get_user_pairs,
     latest_metrics,
+    remove_user_pair,
     save_simulation_update,
     upsert_metrics,
 )
@@ -209,3 +212,38 @@ class TestGetTradeFills:
         fetched = get_trade_fills(trade_id)
         ts = [f.candle_ts for f in fetched]
         assert ts == sorted(ts)
+
+
+# ── UserPair: custom pair management ──────────────────────────────────
+
+class TestUserPairs:
+    def test_get_user_pairs_empty(self):
+        assert get_user_pairs() == []
+
+    def test_add_and_get(self):
+        add_user_pair("LINK/USDT", "crypto")
+        pairs = get_user_pairs()
+        assert "LINK/USDT" in pairs
+
+    def test_add_stock_pair(self):
+        add_user_pair("TSLAX/USD", "stock")
+        assert "TSLAX/USD" in get_user_pairs()
+
+    def test_add_is_idempotent(self):
+        add_user_pair("LINK/USDT", "crypto")
+        add_user_pair("LINK/USDT", "crypto")
+        assert get_user_pairs().count("LINK/USDT") == 1
+
+    def test_remove_existing(self):
+        add_user_pair("AVAX/USDT", "crypto")
+        remove_user_pair("AVAX/USDT")
+        assert "AVAX/USDT" not in get_user_pairs()
+
+    def test_remove_nonexistent_does_not_raise(self):
+        remove_user_pair("DOES_NOT_EXIST/USDT")
+
+    def test_get_returns_symbols_in_order(self):
+        add_user_pair("LINK/USDT", "crypto")
+        add_user_pair("AVAX/USDT", "crypto")
+        pairs = get_user_pairs()
+        assert pairs.index("LINK/USDT") < pairs.index("AVAX/USDT")

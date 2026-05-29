@@ -50,6 +50,15 @@ class Trade(Base):
     notes = Column(String, default="")
 
 
+class UserPair(Base):
+    """User-added custom trading pair, persisted across sessions."""
+    __tablename__ = "user_pairs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(32), unique=True, nullable=False, index=True)
+    pair_type = Column(String(8), nullable=False, default="crypto")  # "crypto" | "stock"
+    added_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 def init_db() -> None:
     Base.metadata.create_all(_engine)
 
@@ -254,3 +263,36 @@ def all_latest() -> list[MetricsCache]:
         for r in rows:
             seen.setdefault(r.symbol, r)
         return list(seen.values())
+
+
+# ── User-managed pairs ────────────────────────────────────────────────────────
+
+def get_user_pairs() -> list[str]:
+    """Return custom pair symbols ordered by when they were added."""
+    with Session(_engine, future=True) as s:
+        rows = s.execute(
+            select(UserPair).order_by(UserPair.added_at)
+        ).scalars().all()
+        return [r.symbol for r in rows]
+
+
+def add_user_pair(symbol: str, pair_type: str = "crypto") -> None:
+    """Upsert a custom pair — no-op if it already exists."""
+    with Session(_engine, future=True) as s:
+        existing = s.execute(
+            select(UserPair).where(UserPair.symbol == symbol)
+        ).scalar_one_or_none()
+        if existing is None:
+            s.add(UserPair(symbol=symbol, pair_type=pair_type))
+            s.commit()
+
+
+def remove_user_pair(symbol: str) -> None:
+    """Delete a custom pair. No-op if not found."""
+    with Session(_engine, future=True) as s:
+        row = s.execute(
+            select(UserPair).where(UserPair.symbol == symbol)
+        ).scalar_one_or_none()
+        if row is not None:
+            s.delete(row)
+            s.commit()
