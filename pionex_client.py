@@ -116,5 +116,5 @@ class PionexClient:
             if isinstance(tickers, dict):
                 tickers = tickers.get("tickers", [])
             return bool(tickers)
-        except Exception:
+        except requests.RequestException:
             return None

@@ -268,7 +268,7 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str, snap=N
                 c = "#22c55e" if o_ss >= 7.5 else "#fbbf24" if o_ss >= 5 else "#94a3b8"
                 html += _chip(f"Setup {o_ss:.1f}", c, f"{c}18")
             html += "</div>"
-        except Exception:
+        except Exception:  # noqa: BLE001 — detached ORM instance or missing field; skip section silently
             pass
 
     # Alert box
@@ -299,13 +299,13 @@ def _render_bot_card(bot: dict, metrics: dict, advice: dict, symbol: str, snap=N
     # Assessment history (last 5 polls)
     if history:
         try:
-            html += "<div class='bot-section-label'>Recent Assessments</div>"
-            html += "<div class='bot-history'>"
-            for h in history[:5]:
-                fg2, bg2, _ = _ACTION_STYLE.get(h.action, ("#94a3b8", "#1e293b", "#334155"))
-                html += _chip(f"{_time_ago(h.assessed_at)} {h.action.replace('_', ' ')}", fg2, bg2)
-            html += "</div>"
-        except Exception:
+            chips = "".join(
+                _chip(f"{_time_ago(h.assessed_at)} {h.action.replace('_', ' ')}",
+                      *_ACTION_STYLE.get(h.action, ("#94a3b8", "#1e293b", "#334155"))[:2])
+                for h in history[:5]
+            )
+            html += f"<div class='bot-section-label'>Recent Assessments</div><div class='bot-history'>{chips}</div>"
+        except Exception:  # noqa: BLE001 — detached ORM instance or missing field; skip section silently
             pass
 
     html += "</div>"
