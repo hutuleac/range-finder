@@ -95,3 +95,26 @@ class PionexClient:
         return self._get("/api/v1/bot/orders/spotGrid/order", {
             "buOrderId": order_id,
         })
+
+    def validate_symbol(self, symbol: str) -> bool | None:
+        """Check if a symbol is listed on Pionex. No authentication required.
+
+        Returns True if found, False if not found, None on network/API error.
+        Note: symbol format uses '_' separator (e.g. BTC_USDT).
+        Response shape: {"result": true, "data": {"tickers": [...]}}
+        """
+        try:
+            resp = requests.get(
+                f"{_BASE}/api/v1/market/tickers",
+                params={"symbol": symbol.replace("/", "_")},
+                timeout=10,
+            )
+            data = resp.json()
+            if not data.get("result"):
+                return False
+            tickers = data.get("data", {})
+            if isinstance(tickers, dict):
+                tickers = tickers.get("tickers", [])
+            return bool(tickers)
+        except Exception:
+            return None

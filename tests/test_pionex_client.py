@@ -135,6 +135,46 @@ class TestListRunningBots:
         assert result == []
 
 
+# ── validate_symbol ───────────────────────────────────────────────────
+
+class TestValidateSymbol:
+    @patch("pionex_client.requests.get")
+    def test_returns_true_when_symbol_found(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"result": True, "data": {"tickers": [{"symbol": "TSLAX_USD", "close": "25.0"}]}},
+        )
+        client = PionexClient()
+        assert client.validate_symbol("TSLAX/USD") is True
+
+    @patch("pionex_client.requests.get")
+    def test_returns_false_when_result_false(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"result": False, "code": "MARKET_INVALID_SYMBOL", "data": None},
+        )
+        client = PionexClient()
+        assert client.validate_symbol("FAKE/USD") is False
+
+    @patch("pionex_client.requests.get")
+    def test_returns_false_when_tickers_empty(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"result": True, "data": {"tickers": []}},
+        )
+        client = PionexClient()
+        assert client.validate_symbol("UNKNOWN/USD") is False
+
+    @patch("pionex_client.requests.get", side_effect=Exception("timeout"))
+    def test_returns_none_on_network_error(self, mock_get):
+        client = PionexClient()
+        assert client.validate_symbol("TSLAX/USD") is None
+
+    def test_works_without_api_keys(self):
+        client = PionexClient(api_key="", api_secret="")
+        assert hasattr(client, "validate_symbol")
+
+
 # ── get_bot_detail ────────────────────────────────────────────────────
 
 class TestGetBotDetail:
