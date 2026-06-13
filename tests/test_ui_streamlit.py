@@ -77,6 +77,16 @@ class TestRangeFinder:
             },
             "adxSlope": {"adx_slope": "FLAT", "adx_values": [], "adx_delta": 0.0},
         }
+        payload["matrix"] = {
+            "scores": {"GRID_NEUTRAL": 78.0, "GRID_LONG": 55.0,
+                       "GRID_SHORT": 52.0, "DIRECTIONAL": 40.0},
+            "winner": "GRID_NEUTRAL", "winnerScore": 78.0,
+            "breakdown": {"GRID_NEUTRAL": [
+                {"indicator": "BB_bandwidth", "weight": 16,
+                 "normalized": 1.0, "contribution": 16.0},
+            ]},
+            "version": "1.0-heuristic",
+        }
         tl.upsert_metrics(row["symbol"], row["price"], row["score"],
                           row["direction"], payload)
         at = self._run()
@@ -84,6 +94,8 @@ class TestRangeFinder:
         all_md = " ".join(str(m.value) for m in at.markdown if m.value)
         assert "REGIME" in all_md
         assert "Confirmed Ranging" in all_md
+        assert "STRATEGY MATRIX" in all_md
+        assert "Grid·N" in all_md
 
 
 class TestSignalScanner:

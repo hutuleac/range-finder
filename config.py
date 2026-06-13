@@ -24,6 +24,31 @@ CFG: dict = {
     "KLINES_DAILY": 120,
     "KLINES_WEEKLY": 60,
 
+    # Profitability matrix (Phase 3) — per-strategy weighted scoring (additive view).
+    # Strategy columns, in order: GRID_NEUTRAL, GRID_LONG, GRID_SHORT, DIRECTIONAL.
+    # Weights (1–16) adapted from Double-main's matrix_profitability_v1.2; these are
+    # heuristic starting points, NOT calibrated for range-finder's pairs.
+    "MATRIX": {
+        "VERSION": "1.0-heuristic",
+        "STRATEGIES": ["GRID_NEUTRAL", "GRID_LONG", "GRID_SHORT", "DIRECTIONAL"],
+        "WEIGHTS": {
+            # indicator:   [GRID_NEUTRAL, GRID_LONG, GRID_SHORT, DIRECTIONAL]
+            "ADX":          [15, 5, 5, 13],
+            "ADX_slope":    [13, 7, 7, 12],
+            "BB_bandwidth": [16, 7, 7, 9],
+            "ATR_pct":      [13, 8, 8, 9],
+            "ER":           [11, 9, 9, 13],
+            "Hurst":        [12, 11, 11, 13],
+            "RSI":          [10, 8, 8, 6],
+            "funding":      [6, 11, 11, 10],
+            "CVD_14d":      [8, 12, 12, 15],
+            "flow":         [7, 10, 10, 11],
+            "OI_change":    [9, 10, 10, 11],
+            "structure":    [6, 11, 11, 12],
+            "trend_daily":  [6, 12, 12, 13],
+        },
+    },
+
     # Regime layer (Phase 2) — ER × Hurst cross-validation, ADX slope, daily trend.
     # Double-derived heuristics; NOT calibrated for range-finder's pairs (see IMPROVEMENT_PLAN.md).
     "REGIME": {
