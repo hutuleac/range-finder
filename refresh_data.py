@@ -33,6 +33,21 @@ logging.basicConfig(
 log = logging.getLogger("pyonex.refresh")
 
 
+def build_mtf(symbol: str) -> dict:
+    """Fetch daily/weekly closes for the regime layer (Phase 2 consumer).
+
+    Returns empty lists on fetch failure so downstream regime indicators
+    degrade to UNKNOWN rather than crashing the card. Daily/weekly are a
+    separate, optional spine — they never block the 4H pipeline.
+    """
+    df_daily = parse_klines(fetch_klines(symbol, "1d", CFG["KLINES_DAILY"]))
+    df_weekly = parse_klines(fetch_klines(symbol, "1w", CFG["KLINES_WEEKLY"]))
+    return {
+        "dailyCloses": df_daily["Close"].tolist() if not df_daily.empty else [],
+        "weeklyCloses": df_weekly["Close"].tolist() if not df_weekly.empty else [],
+    }
+
+
 def refresh_one(symbol: str) -> dict | None:
     t0 = time.time()
     raw_main = fetch_klines(symbol, "4h", CFG["KLINES_MAIN"])
@@ -101,6 +116,7 @@ def refresh_one(symbol: str) -> dict | None:
         "duration": duration,
         "viability": viability,
         "signalInfo": signal_info,
+        "mtf": build_mtf(symbol),
     }
     upsert_metrics(symbol, price, score, direction["type"], payload)
     log.info(

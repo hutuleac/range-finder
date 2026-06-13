@@ -53,8 +53,16 @@ class TestRefreshOne:
         payload = refresh_data.refresh_one("BTC/USDT")
         assert payload is not None
         for key in ("metrics", "profile", "scoreInfo", "direction", "range",
-                    "mode", "gridCount", "duration", "viability", "signalInfo"):
+                    "mode", "gridCount", "duration", "viability", "signalInfo",
+                    "mtf"):
             assert key in payload
+
+    def test_payload_includes_daily_weekly_closes(self, patched_io):
+        payload = refresh_data.refresh_one("BTC/USDT")
+        mtf = payload["mtf"]
+        assert len(mtf["dailyCloses"]) == refresh_data.CFG["KLINES_DAILY"]
+        assert len(mtf["weeklyCloses"]) == refresh_data.CFG["KLINES_WEEKLY"]
+        assert all(isinstance(c, float) for c in mtf["dailyCloses"])
 
     def test_upserts_cache_with_consistent_values(self, patched_io):
         payload = refresh_data.refresh_one("ETH/USDT")
@@ -78,6 +86,22 @@ class TestRefreshOne:
         # calc_recommended_grid_count returns {recommended, min, max}.
         assert isinstance(gc["recommended"], int)
         assert gc["recommended"] >= 1
+
+
+class TestBuildMtf:
+    def test_returns_closes_for_both_timeframes(self):
+        with patch.object(refresh_data, "fetch_klines",
+                          side_effect=lambda s, tf, n: _raw_klines(n)):
+            mtf = refresh_data.build_mtf("BTC/USDT")
+        assert len(mtf["dailyCloses"]) == refresh_data.CFG["KLINES_DAILY"]
+        assert len(mtf["weeklyCloses"]) == refresh_data.CFG["KLINES_WEEKLY"]
+
+    def test_empty_lists_when_fetch_fails(self):
+        """A daily/weekly fetch miss degrades to empty lists, never raises —
+        so the regime layer can fall back to UNKNOWN without blanking the card."""
+        with patch.object(refresh_data, "fetch_klines", return_value=[]):
+            mtf = refresh_data.build_mtf("DEAD/USDT")
+        assert mtf == {"dailyCloses": [], "weeklyCloses": []}
 
 
 class TestMain:
