@@ -31,3 +31,7 @@ Thumbs.db
 graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/cache/
+
+# calibration harness — cached klines are local-only (keep the .gitkeep placeholder)
+calibration/_cache/*
+!calibration/_cache/.gitkeep
