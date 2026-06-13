@@ -55,6 +55,36 @@ class TestRangeFinder:
         ]
         assert len(cache_empty_warnings) == 0
 
+    def test_regime_badge_renders_when_present(self):
+        """A payload carrying a resolved regime shows the REGIME badge + hint."""
+        import json
+        from pathlib import Path
+
+        import trade_logger as tl
+
+        snap = json.loads(
+            (Path(__file__).parent / "fixtures" / "metrics_snapshot.json").read_text())
+        row = snap[0]
+        payload = row["payload"]
+        payload["regime"] = {
+            "er": {"er_value": 0.12, "er_regime": "RANGING"},
+            "hurst": {"hurst_daily": 0.43, "regime": "MEAN_REVERTING"},
+            "trendDaily": "Neutral",
+            "confirmation": {
+                "combined_regime": "CONFIRMED_RANGING", "conviction": "HIGH",
+                "aligned": True, "trend_direction": "NEUTRAL",
+                "strategy_hint": "GRID — fade extremes, mean reversion optimal",
+            },
+            "adxSlope": {"adx_slope": "FLAT", "adx_values": [], "adx_delta": 0.0},
+        }
+        tl.upsert_metrics(row["symbol"], row["price"], row["score"],
+                          row["direction"], payload)
+        at = self._run()
+        assert not at.exception
+        all_md = " ".join(str(m.value) for m in at.markdown if m.value)
+        assert "REGIME" in all_md
+        assert "Confirmed Ranging" in all_md
+
 
 class TestSignalScanner:
     """Signal Scanner page — routed via sidebar radio."""

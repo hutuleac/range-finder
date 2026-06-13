@@ -23,6 +23,7 @@ from grid_calculator import (
     select_grid_mode,
 )
 from indicators import OIData, get_advanced_metrics, parse_klines
+from regime import build_regime
 from signal_engine import calc_setup_score
 from trade_logger import init_db, upsert_metrics
 
@@ -105,6 +106,9 @@ def refresh_one(symbol: str) -> dict | None:
 
     signal_info = calc_setup_score(metrics, df_main)
 
+    mtf = build_mtf(symbol)
+    regime = build_regime(mtf, df_main)
+
     payload = {
         "metrics": metrics,
         "profile": profile,
@@ -116,7 +120,8 @@ def refresh_one(symbol: str) -> dict | None:
         "duration": duration,
         "viability": viability,
         "signalInfo": signal_info,
-        "mtf": build_mtf(symbol),
+        "mtf": mtf,
+        "regime": regime,
     }
     upsert_metrics(symbol, price, score, direction["type"], payload)
     log.info(

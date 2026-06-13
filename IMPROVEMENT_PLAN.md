@@ -43,8 +43,10 @@ One honesty caveat carried throughout: Double's weights (1–16) and FSM thresho
 - `calc_efficiency_ratio(df_daily, period=10)` → ER value + regime (TRENDING/TRANSITIONAL/RANGING) with grid/dir hints.
 - `hurst_daily(closes, window=90)` + `_classify_hurst` → TRENDING / RANDOM / MEAN_REVERTING.
 - `calc_regime_confirmation(er, hurst, trend_daily)` → combined regime + conviction (HIGH/…) + strategy hint. This is the keystone — it turns two raw numbers into one direction-aware verdict.
-- `core/regime_fsm.classify_symbol` → COIL/EXPANSION/TREND/EXHAUSTION/NEUTRAL state. Memoryless per-bar classifier; pure logic, easy port. Use it as the *frame* (grid vs directional bias), not an entry trigger.
-- Add `calc_adx_slope` (range-finder has ADX but not its slope) — FALLING/PEAKED/RISING/FLAT — used by both the FSM and the matrix's ADX normalization.
+- Add `calc_adx_slope` (range-finder has ADX but not its slope) — FALLING/PEAKED/RISING/FLAT — used by the matrix's ADX normalization and (later) the FSM.
+
+**FSM reclassified (discovered during Phase 2):** `regime_fsm.classify` is *not* a clean port for range-finder. It needs fields range-finder lacks (1H ADX, `swing_phase`, `compression_ratio`, 4H BB-band break) and Double's own docstring calls it provisional/uncalibrated. Building it here means substituting 5 inputs (squeeze→compression, 4H→1H ADX, structure→swing) and inventing thresholds — a new heuristic, not a port, with no ground truth to parity-test. **Deferred to Phase 2.5** as a clearly-labeled range-finder-native classifier, build-or-skip TBD. The headline regime badge does not need it: ER × Hurst × regime_confirmation already delivers the "RANGING · conviction HIGH → grid-favourable" verdict.
+- `hurst_weekly` skipped — `regime_confirmation` only consumes daily Hurst.
 **UI:** one regime badge per card (e.g. "NEUTRAL · ER 0.31 RANGING · Hurst 0.42 MEAN-REV · conviction HIGH → grid-favourable"). Surface in Range Finder cards and the cross-reference table.
 **Labeling:** ship ER/Hurst/FSM thresholds in `config.py` (`REGIME` block) and comment them as *Double-derived heuristics, not calibrated for range-finder pairs*.
 **Optional extras (defer):** DFA (redundant with Hurst), Supertrend (extra trend filter).
