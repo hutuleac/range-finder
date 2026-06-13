@@ -560,6 +560,42 @@ def render_symbol(payload: dict, symbol: str) -> None:
         unsafe_allow_html=True,
     )
 
+    # ── Regime badge (Phase 2): ER × Hurst verdict ──────────────────
+    regime = payload.get("regime")
+    conf = (regime or {}).get("confirmation") or {}
+    combined = conf.get("combined_regime", "UNKNOWN")
+    if regime and combined != "UNKNOWN":
+        er = regime.get("er") or {}
+        hurst = regime.get("hurst") or {}
+        # Grid-favourability colour: ranging = green, trending = red, mixed = amber.
+        if combined == "CONFIRMED_RANGING":
+            rc = "#22c55e"
+        elif combined.startswith("CONFIRMED_TRENDING"):
+            rc = "#ef4444"
+        elif combined == "CONFLICTING":
+            rc = "#6b7280"
+        else:
+            rc = "#fbbf24"
+        conv = conf.get("conviction", "")
+        sub = (
+            f"ER {er.get('er_value')} {er.get('er_regime')} · "
+            f"H {hurst.get('hurst_daily')} {hurst.get('regime')} · "
+            f"trend {regime.get('trendDaily')}"
+        )
+        st.markdown(
+            f"<div style='margin:.35rem 0'>"
+            f"<span style='display:inline-flex;align-items:center;gap:.3rem;"
+            f"padding:.3rem .7rem;border-radius:20px;font-size:.8rem;font-weight:600;"
+            f"background:{rc}18;border:1px solid {rc}44;color:{rc}'>"
+            f"<span style='color:#94a3b8;font-weight:400;font-size:.72rem'>REGIME</span>"
+            f"&thinsp;{combined.replace('_', ' ').title()} · {conv}</span>"
+            f"<div style='color:#94a3b8;font-size:.72rem;margin-top:.2rem'>{sub}</div>"
+            f"<div style='color:#cbd5e1;font-size:.74rem;margin-top:.1rem'>"
+            f"▸ {conf.get('strategy_hint', '')}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     # ── Zone 2: Score breakdown — slim rows, status text only ───────
     bars_parts = ["<div style='width:100%;margin:.3rem 0'>"]
     for comp in score_info["components"]:
