@@ -802,7 +802,15 @@ for sym, p in payloads.items():
         "Squeeze":   "Yes" if (p["metrics"].get("squeeze") or {}).get("squeeze") else "No",
     })
 
-df_summary = pd.DataFrame(summary).sort_values("Score", ascending=False)
+# Explicit columns so an empty cache keeps the schema (no KeyError on sort/style
+# when a bare `import app` falls through st.stop() with no data fetched).
+df_summary = pd.DataFrame(
+    summary,
+    columns=["Symbol", "Price", "Score", "Label", "Direction", "Viable",
+             "Range %", "Mode", "Grids", "Struct 4H", "Squeeze"],
+)
+if not df_summary.empty:
+    df_summary = df_summary.sort_values("Score", ascending=False)
 
 
 def _score_bg(val: float) -> str:
