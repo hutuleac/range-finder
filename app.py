@@ -596,6 +596,28 @@ def render_symbol(payload: dict, symbol: str) -> None:
             unsafe_allow_html=True,
         )
 
+    # ── Cycle chip (Phase 2.5): volatility-cycle FSM state + bias ───────
+    # Fully .get-guarded: old cached payloads without "fsm" render unchanged.
+    fsm = payload.get("fsm") or {}
+    fsm_state = fsm.get("state")
+    if fsm_state and fsm_state not in ("UNKNOWN", "NEUTRAL"):
+        # COIL green (grid window), EXPANSION/TREND red (directional), EXHAUSTION amber.
+        fc = {"COIL": "#22c55e", "EXPANSION": "#ef4444",
+              "TREND": "#ef4444", "EXHAUSTION": "#fbbf24"}.get(fsm_state, "#6b7280")
+        fsm_dir = fsm.get("direction", "NEUTRAL")
+        dir_txt = f" · {fsm_dir}" if fsm_dir and fsm_dir != "NEUTRAL" else ""
+        st.markdown(
+            f"<div style='margin:.35rem 0'>"
+            f"<span style='display:inline-flex;align-items:center;gap:.3rem;"
+            f"padding:.3rem .7rem;border-radius:20px;font-size:.8rem;font-weight:600;"
+            f"background:{fc}18;border:1px solid {fc}44;color:{fc}'>"
+            f"<span style='color:#94a3b8;font-weight:400;font-size:.72rem'>CYCLE</span>"
+            f"&thinsp;{fsm_state.title()}{dir_txt}</span>"
+            f"<div style='color:#94a3b8;font-size:.72rem;margin-top:.2rem'>"
+            f"{fsm.get('reason', '')}</div></div>",
+            unsafe_allow_html=True,
+        )
+
     # ── Strategy matrix (Phase 3): per-strategy suitability, additive view ──
     matrix = payload.get("matrix")
     if matrix and matrix.get("scores"):

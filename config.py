@@ -60,6 +60,16 @@ CFG: dict = {
         "TREND_NEUTRAL_BAND": 0.001,  # ±0.1% dead-band → Neutral
     },
 
+    # Volatility-cycle FSM (Phase 2.5) — range-finder-native heuristic adapted from
+    # Double-main/core/regime_fsm.py. NOT a parity port; these thresholds are
+    # INVENTED for range-finder's 4H inputs and UNCALIBRATED (no ground truth).
+    "FSM": {
+        "ADX_FLOOR": 18.0,  # 4H ADX floor for a valid break/exhaustion (Double used 1H ~p25)
+        "ADX_HIGH": 25.0,   # 4H ADX above this = established trend (matches grid ADX_BLOCK)
+        "RSI_HIGH": 65.0,   # 4H RSI stretched up → exhaustion of an up-structure
+        "RSI_LOW": 35.0,    # 4H RSI stretched down → exhaustion of a down-structure
+    },
+
     # Indicators
     "RSI_PERIOD": 14,
     "ATR_PERIOD": 14,

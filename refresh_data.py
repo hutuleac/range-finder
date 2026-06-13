@@ -22,6 +22,7 @@ from grid_calculator import (
     select_grid_direction,
     select_grid_mode,
 )
+from fsm import build_fsm
 from indicators import OIData, get_advanced_metrics, parse_klines
 from matrix import calc_matrix
 from regime import build_regime
@@ -110,6 +111,7 @@ def refresh_one(symbol: str) -> dict | None:
     mtf = build_mtf(symbol)
     regime = build_regime(mtf, df_main)
     matrix = calc_matrix(metrics, regime)
+    fsm = build_fsm(metrics, regime)
 
     payload = {
         "metrics": metrics,
@@ -125,6 +127,7 @@ def refresh_one(symbol: str) -> dict | None:
         "mtf": mtf,
         "regime": regime,
         "matrix": matrix,
+        "fsm": fsm,
     }
     upsert_metrics(symbol, price, score, direction["type"], payload)
     log.info(

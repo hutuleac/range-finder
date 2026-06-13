@@ -54,7 +54,7 @@ class TestRefreshOne:
         assert payload is not None
         for key in ("metrics", "profile", "scoreInfo", "direction", "range",
                     "mode", "gridCount", "duration", "viability", "signalInfo",
-                    "mtf", "regime", "matrix"):
+                    "mtf", "regime", "matrix", "fsm"):
             assert key in payload
 
     def test_payload_includes_daily_weekly_closes(self, patched_io):
