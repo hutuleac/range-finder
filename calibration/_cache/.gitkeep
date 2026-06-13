@@ -1,0 +1,2 @@
+# Cached historical klines land here (JSON, one file per pair/timeframe).
+# Gitignored except this placeholder so reruns are cheap and bounded.
