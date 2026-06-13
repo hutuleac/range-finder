@@ -24,6 +24,17 @@ CFG: dict = {
     "KLINES_DAILY": 120,
     "KLINES_WEEKLY": 60,
 
+    # Regime layer (Phase 2) — ER × Hurst cross-validation, ADX slope, daily trend.
+    # Double-derived heuristics; NOT calibrated for range-finder's pairs (see IMPROVEMENT_PLAN.md).
+    "REGIME": {
+        "ER_PERIOD": 10,            # Kaufman ER lookback on daily closes
+        "HURST_WINDOW": 90,         # daily closes for R/S Hurst
+        "ADX_SLOPE_LOOKBACK": 5,    # 4H ADX readings compared for slope
+        "TREND_EMA_FAST": 20,       # daily EMA fast for trend_daily
+        "TREND_EMA_SLOW": 50,       # daily EMA slow for trend_daily
+        "TREND_NEUTRAL_BAND": 0.001,  # ±0.1% dead-band → Neutral
+    },
+
     # Indicators
     "RSI_PERIOD": 14,
     "ATR_PERIOD": 14,
