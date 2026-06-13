@@ -596,6 +596,43 @@ def render_symbol(payload: dict, symbol: str) -> None:
             unsafe_allow_html=True,
         )
 
+    # ── Strategy matrix (Phase 3): per-strategy suitability, additive view ──
+    matrix = payload.get("matrix")
+    if matrix and matrix.get("scores"):
+        scores = matrix["scores"]
+        winner = matrix.get("winner")
+        labels = {"GRID_NEUTRAL": "Grid·N", "GRID_LONG": "Grid·L",
+                  "GRID_SHORT": "Grid·S", "DIRECTIONAL": "Direct"}
+        cells = []
+        for strat in ("GRID_NEUTRAL", "GRID_LONG", "GRID_SHORT", "DIRECTIONAL"):
+            sc = scores.get(strat, 0.0)
+            is_win = strat == winner
+            col = "#22c55e" if is_win else "#64748b"
+            bg = f"{col}22" if is_win else "#1e2533"
+            border = f"1px solid {col}{'66' if is_win else '33'}"
+            weight = "700" if is_win else "500"
+            cells.append(
+                f"<div style='flex:1;text-align:center;padding:.35rem .2rem;"
+                f"border-radius:8px;background:{bg};border:{border}'>"
+                f"<div style='font-size:.66rem;color:#94a3b8'>{labels[strat]}</div>"
+                f"<div style='font-size:1.0rem;font-weight:{weight};color:{col}'>{sc:.0f}</div>"
+                f"</div>"
+            )
+        st.markdown(
+            "<div style='font-size:.68rem;color:#94a3b8;margin:.4rem 0 .2rem'>STRATEGY MATRIX</div>"
+            f"<div style='display:flex;gap:.3rem'>{''.join(cells)}</div>",
+            unsafe_allow_html=True,
+        )
+        # Winner's top contributors
+        top = (matrix.get("breakdown") or {}).get(winner, [])[:4]
+        if top:
+            chips = " · ".join(f"{r['indicator']} {r['contribution']:.0f}" for r in top)
+            st.markdown(
+                f"<div style='font-size:.68rem;color:#6b7280;margin-top:.2rem'>"
+                f"top: {chips}</div>",
+                unsafe_allow_html=True,
+            )
+
     # ── Zone 2: Score breakdown — slim rows, status text only ───────
     bars_parts = ["<div style='width:100%;margin:.3rem 0'>"]
     for comp in score_info["components"]:

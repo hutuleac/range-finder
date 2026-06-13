@@ -52,7 +52,12 @@ One honesty caveat carried throughout: Double's weights (1–16) and FSM thresho
 **Optional extras (defer):** DFA (redundant with Hurst), Supertrend (extra trend filter).
 **Effort:** M. **Risk:** low–medium (numerical parity — see cross-cutting note).
 
-### Phase 3 — Reduced profitability matrix *(replaces the single blended grid score)*
+### Phase 3 — Reduced profitability matrix *(DONE — shipped as additive view)*
+**Status (build):** Shipped on branch `phase3-profitability-matrix` as an **additive view** (user decision): `matrix.py` scores 4 strategies (GRID_NEUTRAL/LONG/SHORT + DIRECTIONAL) from 13 range-finder indicators + the regime layer, cached as `payload["matrix"]`, surfaced as a strategy panel on each card with the winner highlighted + top contributors. Weights in `config.py["MATRIX"]` (heuristic). The existing `calc_grid_score` and the recommendation pipeline (direction/range/viability) are **untouched** — the headline-score swap is deferred to a follow-up once the matrix proves out, so the dashboard shows the matrix beside the existing score rather than replacing it.
+
+Original plan (headline-replace approach) below, kept for reference:
+
+
 **Why third:** consumes Phase 2's regime outputs (ER, Hurst, regime, ADX_slope are matrix inputs).
 **Port the *methodology*, not Double's 7-bot matrix:**
 - New `matrix.py`: an `IndicatorWeight(name, weights_by_strategy, category)` table and a `_normalize_indicator` with bot-type-aware 0–1 mapping (Double's `matrix_profitability_v1.2.py` is the template).
