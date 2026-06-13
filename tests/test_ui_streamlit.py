@@ -97,6 +97,30 @@ class TestRangeFinder:
         assert "STRATEGY MATRIX" in all_md
         assert "Grid·N" in all_md
 
+    def test_cycle_chip_renders_when_fsm_present(self):
+        """A payload carrying a directional FSM state shows the CYCLE chip."""
+        import json
+        from pathlib import Path
+
+        import trade_logger as tl
+
+        snap = json.loads(
+            (Path(__file__).parent / "fixtures" / "metrics_snapshot.json").read_text())
+        row = snap[0]
+        payload = row["payload"]
+        payload["fsm"] = {
+            "state": "TREND", "direction": "LONG",
+            "reason": "ER trending + ADX 30 + LONG",
+        }
+        tl.upsert_metrics(row["symbol"], row["price"], row["score"],
+                          row["direction"], payload)
+        at = self._run()
+        assert not at.exception
+        all_md = " ".join(str(m.value) for m in at.markdown if m.value)
+        assert "CYCLE" in all_md
+        assert "Trend" in all_md
+        assert "LONG" in all_md
+
 
 class TestSignalScanner:
     """Signal Scanner page — routed via sidebar radio."""
