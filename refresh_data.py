@@ -19,6 +19,7 @@ from grid_calculator import (
     calc_recommended_grid_count,
     estimate_grid_duration,
     get_ticker_grid_profile,
+    grid_headline_label,
     select_grid_direction,
     select_grid_mode,
 )
@@ -80,13 +81,21 @@ def refresh_one(symbol: str) -> dict | None:
     atr_pct = metrics.get("atrPct", 0.0)
     price = metrics.get("currClose", 0.0)
 
-    # First pass with Neutral to compute score (which drives direction)
+    # Regime + matrix first — the matrix GRID_NEUTRAL column is the headline
+    # grid score and its grid columns drive direction (headline-swap).
+    mtf = build_mtf(symbol)
+    regime = build_regime(mtf, df_main)
+    matrix = calc_matrix(metrics, regime)
+
+    score = matrix["scores"]["GRID_NEUTRAL"]
+    headline_label = grid_headline_label(score)
+    direction = select_grid_direction(matrix["scores"])
+
+    # Legacy 0–10 grid score kept for the score-breakdown bars / recs only.
     neutral_range = calc_range_from_atr(price, atr_pct, profile["rangeMultiplier"], "Neutral")
     metrics_with_range = {**metrics, "gridRange": neutral_range}
     score_info = calc_grid_score(metrics_with_range)
-    score = score_info["score"]
 
-    direction = select_grid_direction(structure4h, score)
     directional_range = calc_range_from_atr(price, atr_pct, profile["rangeMultiplier"], direction["type"])
     mode = select_grid_mode(directional_range["rangeWidthPct"])
     recommended = calc_recommended_grid_count(
@@ -107,13 +116,10 @@ def refresh_one(symbol: str) -> dict | None:
 
     signal_info = calc_setup_score(metrics, df_main)
 
-    mtf = build_mtf(symbol)
-    regime = build_regime(mtf, df_main)
-    matrix = calc_matrix(metrics, regime)
-
     payload = {
         "metrics": metrics,
         "profile": profile,
+        "gridHeadline": {"score": score, "label": headline_label},
         "scoreInfo": score_info,
         "direction": direction,
         "range": directional_range,

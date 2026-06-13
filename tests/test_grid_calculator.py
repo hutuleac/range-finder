@@ -16,6 +16,7 @@ from grid_calculator import (
     calc_recommended_grid_count,
     estimate_grid_duration,
     get_ticker_grid_profile,
+    grid_headline_label,
     select_grid_direction,
     select_grid_mode,
 )
@@ -144,35 +145,55 @@ class TestCalcRangeFromAtr:
         assert {"rangeLow", "rangeHigh", "rangeWidthPct"} == result.keys()
 
 
-# ── select_grid_direction ─────────────────────────────────────────────
+# ── select_grid_direction (matrix-argmax) ─────────────────────────────
 
 class TestSelectGridDirection:
-    LONG_MIN  = GRID_CONFIG["DIRECTION"]["LONG_MIN_SCORE"]
-    SHORT_MIN = GRID_CONFIG["DIRECTION"]["SHORT_MAX_SCORE"]
+    def test_long_column_leads_returns_long(self):
+        scores = {"GRID_NEUTRAL": 70.0, "GRID_LONG": 79.0, "GRID_SHORT": 50.0}
+        assert select_grid_direction(scores)["type"] == "Long"
 
-    def test_bullish_high_score_returns_long(self):
-        result = select_grid_direction("Bullish", self.LONG_MIN)
-        assert result["type"] == "Long"
+    def test_short_column_leads_returns_short(self):
+        scores = {"GRID_NEUTRAL": 70.0, "GRID_LONG": 50.0, "GRID_SHORT": 79.0}
+        assert select_grid_direction(scores)["type"] == "Short"
 
-    def test_bullish_low_score_returns_neutral(self):
-        result = select_grid_direction("Bullish", self.LONG_MIN - 0.1)
-        assert result["type"] == "Neutral"
+    def test_neutral_column_leads_returns_neutral(self):
+        scores = {"GRID_NEUTRAL": 85.0, "GRID_LONG": 70.0, "GRID_SHORT": 60.0}
+        assert select_grid_direction(scores)["type"] == "Neutral"
 
-    def test_bearish_above_threshold_returns_short(self):
-        result = select_grid_direction("Bearish", self.SHORT_MIN)
-        assert result["type"] == "Short"
+    def test_directional_column_ignored(self):
+        # A high DIRECTIONAL column must not pull the grid direction.
+        scores = {"GRID_NEUTRAL": 80.0, "GRID_LONG": 60.0,
+                  "GRID_SHORT": 60.0, "DIRECTIONAL": 99.0}
+        assert select_grid_direction(scores)["type"] == "Neutral"
 
-    def test_bearish_below_threshold_returns_neutral(self):
-        result = select_grid_direction("Bearish", self.SHORT_MIN - 0.1)
-        assert result["type"] == "Neutral"
+    def test_tie_favours_neutral(self):
+        scores = {"GRID_NEUTRAL": 70.0, "GRID_LONG": 70.0, "GRID_SHORT": 70.0}
+        assert select_grid_direction(scores)["type"] == "Neutral"
 
-    def test_neutral_structure_returns_neutral(self):
-        result = select_grid_direction("Neutral", 9.0)
-        assert result["type"] == "Neutral"
+    def test_none_or_empty_returns_neutral(self):
+        assert select_grid_direction(None)["type"] == "Neutral"
+        assert select_grid_direction({})["type"] == "Neutral"
 
     def test_result_has_type_label_reason(self):
-        result = select_grid_direction("Neutral", 5.0)
+        result = select_grid_direction({"GRID_NEUTRAL": 60.0})
         assert {"type", "label", "reason"} <= result.keys()
+
+
+# ── grid_headline_label ───────────────────────────────────────────────
+
+class TestGridHeadlineLabel:
+    @pytest.mark.parametrize("score,label", [
+        (95.0, "STRONG SETUP"),
+        (80.0, "STRONG SETUP"),
+        (79.9, "GOOD SETUP"),
+        (65.0, "GOOD SETUP"),
+        (64.9, "DEVELOPING"),
+        (50.0, "DEVELOPING"),
+        (49.9, "AVOID"),
+        (0.0, "AVOID"),
+    ])
+    def test_bands(self, score, label):
+        assert grid_headline_label(score) == label
 
 
 # ── select_grid_mode ──────────────────────────────────────────────────

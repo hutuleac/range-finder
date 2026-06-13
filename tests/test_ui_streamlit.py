@@ -87,7 +87,9 @@ class TestRangeFinder:
             ]},
             "version": "1.0-heuristic",
         }
-        tl.upsert_metrics(row["symbol"], row["price"], row["score"],
+        # Headline grid score (0–100) derived from matrix GRID_NEUTRAL.
+        payload["gridHeadline"] = {"score": 78.0, "label": "GOOD SETUP"}
+        tl.upsert_metrics(row["symbol"], row["price"], 78.0,
                           row["direction"], payload)
         at = self._run()
         assert not at.exception
@@ -96,6 +98,8 @@ class TestRangeFinder:
         assert "Confirmed Ranging" in all_md
         assert "STRATEGY MATRIX" in all_md
         assert "Grid·N" in all_md
+        # Headline-swap: the 0–100 label renders on the card + summary table.
+        assert "GOOD SETUP" in all_md
 
 
 class TestSignalScanner:

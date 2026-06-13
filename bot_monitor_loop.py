@@ -86,6 +86,7 @@ def run_bot_monitor_cycle(payloads: dict[str, dict]) -> list[dict]:
         metrics = {**p.get("metrics", {})}
         metrics["_grid_score"]  = p.get("scoreInfo", {}).get("score", 0.0)
         metrics["_setup_score"] = (p.get("signalInfo") or {}).get("score", 0.0)
+        metrics["_matrix_scores"] = (p.get("matrix") or {}).get("scores")
         signal_info = p.get("signalInfo")
 
         if not metrics.get("currClose"):
@@ -118,9 +119,10 @@ def run_bot_monitor_cycle(payloads: dict[str, dict]) -> list[dict]:
 
         rec = advice["recommendation"]
 
-        # Suggested parameters — always computed
+        # Suggested parameters — always computed. grid_score (0–10) is persisted
+        # as the snapshot diagnostic; restart direction comes from the matrix.
         grid_score = metrics["_grid_score"]
-        restart    = _build_restart(symbol, metrics, grid_score)
+        restart    = _build_restart(symbol, metrics, metrics.get("_matrix_scores"))
         if restart:
             profile = get_ticker_grid_profile(symbol)["profile"]
             sl = calc_grid_stop_loss(restart["rangeLow"], profile)

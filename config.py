@@ -117,7 +117,8 @@ GRID_CONFIG: dict = {
     },
     "SQUEEZE": {"BB_WIDTH_MAX": 5.0, "DC_ATR_RATIO_MAX": 0.7},   # tighter squeeze (was 1.0)
     "CVD_LATERAL": {"FULL_SCORE_BELOW": 0.15, "ZERO_SCORE_ABOVE": 0.30},
-    "DIRECTION": {"LONG_MIN_SCORE": 6.0, "SHORT_MAX_SCORE": 4.5},  # LONG_MIN lowered from 6.5
+    # Grid direction is chosen by argmax over the matrix grid columns
+    # (GRID_NEUTRAL / GRID_LONG / GRID_SHORT) — see grid_calculator.select_grid_direction.
     "MIN_GRID_FLOOR_PCT": 0.001,     # minimum net % floor used when computing max grid count
     "DIRECTION_OFFSET_CAP": 0.25,    # short-side cap multiplier for directional grids
     "ATR_DAILY_MULT": 1.5,           # 4H ATR × this ≈ daily range estimate
@@ -190,7 +191,7 @@ LEGENDS: list[tuple[str, str]] = [
     ("Donchian 20/55", "Price breakouts from the 20- or 55-candle high/low. Grid viability drops on a confirmed breakout."),
     ("Squeeze", "BB bandwidth compressed + Donchian/ATR tight. Prime grid window — expect range-bound action."),
     (
-        f"Score 0-10",
-        f"Grid Score >= {GRID_CONFIG['DIRECTION']['LONG_MIN_SCORE']} for Long Grid, >= {GRID_CONFIG['DIRECTION']['SHORT_MAX_SCORE']} for Short. Components: ADX(3), BB(2), CVD lateral(1.5), POC(2), RSI(1), Funding(0.5). Fee: 0.05%/side (Pionex). API: Binance primary, Bybit fallback.",
+        "Score 0-100",
+        "Headline grid score = matrix GRID_NEUTRAL column (0–100): STRONG >=80, GOOD >=65, DEVELOPING >=50, AVOID <50. Direction = argmax of the matrix grid columns (Neutral/Long/Short). Breakdown bars below are the legacy 0–10 components (ADX, BB, CVD lateral, POC, RSI, Funding) kept as a diagnostic. Fee: 0.05%/side (Pionex). API: Binance primary, Bybit fallback.",
     ),
 ]

@@ -176,12 +176,8 @@ def colored(text: str, cls: str) -> str:
 
 
 def score_cls(score: float) -> str:
-    return "score-strong" if score >= 8 else "score-good" if score >= 6 else "score-dev" if score >= 4 else "score-avoid"
-
-
-def score_chip(score: float, label: str) -> str:
-    kind = "green" if score >= 6 else "yellow" if score >= 4 else "red"
-    return chip(f"{score:.1f} {label}", kind)
+    # Headline grid score is the matrix GRID_NEUTRAL column (0–100).
+    return "score-strong" if score >= 80 else "score-good" if score >= 65 else "score-dev" if score >= 50 else "score-avoid"
 
 
 def context_chip(structure: str, adx: float) -> str:
@@ -419,6 +415,7 @@ st.markdown(
 def render_symbol(payload: dict, symbol: str) -> None:
     m          = payload["metrics"]
     score_info = payload["scoreInfo"]
+    headline   = payload.get("gridHeadline") or {}
     direction  = payload["direction"]
     rng        = payload["range"]
     mode       = payload["mode"]
@@ -429,7 +426,7 @@ def render_symbol(payload: dict, symbol: str) -> None:
     prof_name  = profile_override if profile_override != "auto" else profile["profile"]
 
     price = m.get("currClose", 0.0)
-    score = score_info["score"]
+    score = headline.get("score", 0.0)  # matrix GRID_NEUTRAL, 0–100 (headline)
     rsi   = m.get("rsi", 50.0)
     atr_p = m.get("atrPct", 0.0)
     adx_v = (m.get("adx") or {}).get("adx", 0.0)
@@ -499,7 +496,8 @@ def render_symbol(payload: dict, symbol: str) -> None:
         # ── Header: symbol + score + chips + price ──
         f"<div style='font-size:.7rem;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:.35rem'>{symbol}</div>"
         f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.3rem;margin-bottom:.15rem'>"
-        f"<span class='metric-big {cls}'>{score:.1f}</span>"
+        f"<span class='metric-big {cls}'>{score:.0f}</span>"
+        f"<span class='{cls}' style='font-size:.78rem;font-weight:600;letter-spacing:.4px'>{headline.get('label', 'AVOID')}</span>"
         f"</div>"
         f"<div style='display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.3rem'>{ctx_chip_h} {sq_chip_h}</div>"
         f"<div style='font-size:.9rem;font-weight:600;color:#f8fafc;margin-bottom:.4rem'>{price:,.4f}"
@@ -634,7 +632,13 @@ def render_symbol(payload: dict, symbol: str) -> None:
             )
 
     # ── Zone 2: Score breakdown — slim rows, status text only ───────
-    bars_parts = ["<div style='width:100%;margin:.3rem 0'>"]
+    # Legacy 0–10 components, shown as a diagnostic; the headline number above
+    # is the matrix GRID_NEUTRAL score (0–100), not the sum of these bars.
+    bars_parts = [
+        "<div style='font-size:.66rem;color:#6b7280;margin:.3rem 0 .1rem'>"
+        "LEGACY COMPONENT DIAGNOSTIC (0–10)</div>",
+        "<div style='width:100%;margin:.1rem 0 .3rem'>",
+    ]
     for comp in score_info["components"]:
         ratio    = comp["score"] / comp["max"] if comp["max"] else 0
         bc       = comp_bar_color(ratio)
@@ -765,8 +769,8 @@ for sym, p in payloads.items():
     summary.append({
         "Symbol":    sym,
         "Price":     p["metrics"].get("currClose", 0.0),
-        "Score":     p["scoreInfo"]["score"],
-        "Label":     p["scoreInfo"]["label"],
+        "Score":     (p.get("gridHeadline") or {}).get("score", 0.0),
+        "Label":     (p.get("gridHeadline") or {}).get("label", "AVOID"),
         "Direction": p["direction"]["type"],
         "Viable":    "Yes" if p["viability"]["viable"] else "No",
         "Range %":   round(p["range"]["rangeWidthPct"], 2),
@@ -780,11 +784,11 @@ df_summary = pd.DataFrame(summary).sort_values("Score", ascending=False)
 
 
 def _score_bg(val: float) -> str:
-    if val >= 8:
+    if val >= 80:
         return "background-color:#052e16;color:#22c55e;font-weight:700"
-    if val >= 6:
+    if val >= 65:
         return "background-color:#1a2e05;color:#84cc16;font-weight:700"
-    if val >= 4:
+    if val >= 50:
         return "background-color:#2d2500;color:#eab308;font-weight:700"
     return "background-color:#2a0f0f;color:#ef4444;font-weight:700"
 
@@ -817,11 +821,11 @@ styled = (
     .map(_via_bg,    subset=["Viable"])
     .map(_struct_bg, subset=["Struct 4H"])
     .map(_sq_bg,     subset=["Squeeze"])
-    .format({"Price": "{:,.4f}", "Score": "{:.1f}", "Range %": "{:.2f}%"})
+    .format({"Price": "{:,.4f}", "Score": "{:.0f}", "Range %": "{:.2f}%"})
     .set_properties(**{"text-align": "center"})
 )
 # ── Per-symbol cards — swipe down ─────────────────────────────────
-for sym in sorted(payloads, key=lambda s: payloads[s]["scoreInfo"]["score"], reverse=True):
+for sym in sorted(payloads, key=lambda s: (payloads[s].get("gridHeadline") or {}).get("score", 0.0), reverse=True):
     render_symbol(payloads[sym], sym)
 
 # ── Summary table — desktop only (collapsed by default) ────────────

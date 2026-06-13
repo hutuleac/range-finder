@@ -183,12 +183,12 @@ def _render_urgency_table(signal_data: list[dict]) -> None:
             return "background-color:#2a0f16;color:#ef4444"
         return "background-color:#1e293b;color:#94a3b8"
 
-    def _grid_bg(val: float) -> str:
-        if val >= 8:
+    def _grid_bg(val: float) -> str:  # headline grid score is 0–100 (matrix GRID_NEUTRAL)
+        if val >= 80:
             return "background-color:#052e16;color:#22c55e;font-weight:700"
-        if val >= 6:
+        if val >= 65:
             return "background-color:#1a2e05;color:#84cc16;font-weight:700"
-        if val >= 4:
+        if val >= 50:
             return "background-color:#2d2500;color:#eab308;font-weight:700"
         return "background-color:#2a0f0f;color:#ef4444;font-weight:700"
 
@@ -199,7 +199,7 @@ def _render_urgency_table(signal_data: list[dict]) -> None:
         .map(_sig_bg, subset=["Signal"])
         .map(_dir_bg, subset=["Direction"])
         .map(_grid_bg, subset=["Grid Score"])
-        .format({"Setup": "{:.1f}", "Grid Score": "{:.1f}"})
+        .format({"Setup": "{:.1f}", "Grid Score": "{:.0f}"})
         .set_properties(**{"text-align": "center", "font-size": ".85rem"})
     )
     st.dataframe(styled, use_container_width=True, hide_index=True)
@@ -227,7 +227,7 @@ def _render_signal_detail(symbol: str, signal_info: dict, grid_info: dict) -> No
     html += f"<span class='sig-score-big' style='color:{setup_color}'>{si['score']:.1f}</span>"
     html += f"<span class='sig-score-sub'>{_html.escape(si['label'])}</span>"
     html += "<span style='color:#475569;font-size:.9rem'>|</span>"
-    html += f"<span class='sig-score-sub'>Grid {grid_score:.1f} {_html.escape(grid_label)}</span>"
+    html += f"<span class='sig-score-sub'>Grid {grid_score:.0f} {_html.escape(grid_label)}</span>"
     html += "</div>"
     html += f"{_chip(urgency['label'], urg_fg, urg_bg)}"
     html += "</div>"
@@ -373,18 +373,19 @@ def _render_comparison_table(signal_data: list[dict]) -> None:
     styled = (
         df.style
         .map(_outlook_bg, subset=["Outlook"])
-        .format({"Grid Score": "{:.1f}", "Setup Score": "{:.1f}"})
+        .format({"Grid Score": "{:.0f}", "Setup Score": "{:.1f}"})
         .set_properties(**{"text-align": "center", "font-size": ".84rem"})
     )
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
 
 def _cross_ref(setup: float, grid: float) -> str:
-    if setup >= 7.0 and grid >= 7.0:
+    # setup is 0–10 (Signal Scanner); grid is 0–100 (matrix GRID_NEUTRAL headline).
+    if setup >= 7.0 and grid >= 65:
         return "Deploy now"
-    if setup >= 5.0 and grid < 5.0:
+    if setup >= 5.0 and grid < 50:
         return "Prepare — wait for grid"
-    if setup < 3.0 and grid >= 7.0:
+    if setup < 3.0 and grid >= 65:
         return "Monitor — may not last"
     return "Skip"
 
@@ -413,8 +414,8 @@ def render_signal_scanner(selected: list[str], payloads: dict[str, dict]) -> Non
             "symbol": sym,
             "signal_info": si,
             "urgency": si["urgency"],
-            "grid_score": p.get("scoreInfo", {}).get("score", 0.0),
-            "grid_label": p.get("scoreInfo", {}).get("label", ""),
+            "grid_score": (p.get("gridHeadline") or {}).get("score", 0.0),  # 0–100 matrix headline
+            "grid_label": (p.get("gridHeadline") or {}).get("label", ""),
         })
 
     if not signal_data:

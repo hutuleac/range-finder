@@ -255,6 +255,18 @@ class TestAssessBotHealth:
         # restart may be None if price/atr invalid, just check key exists
         assert "restart" in result
 
+    def test_restart_direction_from_matrix(self, mock_bot, mock_metrics):
+        # On a CLOSE, the restart direction is chosen by argmax over the matrix
+        # grid columns injected as _matrix_scores (not the legacy grid score).
+        mock_metrics["currClose"] = 80.0  # below range → CLOSE_NOW
+        mock_metrics["atrPct"] = 2.5
+        mock_metrics["_matrix_scores"] = {
+            "GRID_NEUTRAL": 60.0, "GRID_LONG": 50.0, "GRID_SHORT": 78.0,
+        }
+        result = assess_bot_health(mock_bot, mock_metrics, symbol="ETH/USDT")
+        assert result["restart"] is not None
+        assert result["restart"]["direction"] == "Short"
+
     def test_result_has_all_top_level_keys(self, mock_bot, mock_metrics):
         mock_metrics["currClose"] = 100.0
         result = assess_bot_health(mock_bot, mock_metrics)

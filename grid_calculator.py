@@ -97,22 +97,51 @@ def calc_range_from_atr(
     return {"rangeLow": range_low, "rangeHigh": range_high, "rangeWidthPct": width_pct}
 
 
-def select_grid_direction(structure4h: str, score: float) -> dict:
-    d = GRID_CONFIG["DIRECTION"]
-    if structure4h == "Bullish" and score >= d["LONG_MIN_SCORE"]:
+def select_grid_direction(matrix_scores: dict | None) -> dict:
+    """Pick grid direction from the profitability matrix's grid columns.
+
+    Argmax over GRID_NEUTRAL / GRID_LONG / GRID_SHORT (the DIRECTIONAL column
+    is excluded — it feeds the Spot Trade Setup, not the grid). The matrix
+    columns already fold structure + daily trend in via matrix._dir_map, so a
+    plain argmax is direction-aware; ties favour Neutral (it leads the dict).
+    """
+    scores = matrix_scores or {}
+    grid = {
+        "Neutral": scores.get("GRID_NEUTRAL", 0.0),
+        "Long": scores.get("GRID_LONG", 0.0),
+        "Short": scores.get("GRID_SHORT", 0.0),
+    }
+    pick = max(grid, key=grid.get)
+    if pick == "Long":
         return {
             "type": "Long", "label": "Long Grid",
-            "reason": "Bullish structure — range biased below price to accumulate on dips",
+            "reason": "Long-bias matrix column leads — range biased below price to accumulate on dips",
         }
-    if structure4h == "Bearish" and score >= d["SHORT_MAX_SCORE"]:
+    if pick == "Short":
         return {
             "type": "Short", "label": "Short Grid",
-            "reason": "Bearish structure — range biased above price to sell into pumps",
+            "reason": "Short-bias matrix column leads — range biased above price to sell into pumps",
         }
     return {
         "type": "Neutral", "label": "Neutral Grid",
-        "reason": "No strong directional bias — range straddles current price",
+        "reason": "Neutral-grid matrix column leads — range straddles current price",
     }
+
+
+def grid_headline_label(score: float) -> str:
+    """Headline grid-suitability label from the matrix GRID_NEUTRAL score (0–100).
+
+    Bands are set to the observed GRID_NEUTRAL distribution (it clusters
+    mid-range because missing/neutral matrix inputs floor at 0.5), NOT a ×10 of
+    the legacy 0–10 cutpoints — see the headline-swap PR.
+    """
+    if score >= 80:
+        return "STRONG SETUP"
+    if score >= 65:
+        return "GOOD SETUP"
+    if score >= 50:
+        return "DEVELOPING"
+    return "AVOID"
 
 
 def select_grid_mode(range_width_pct: float) -> dict:

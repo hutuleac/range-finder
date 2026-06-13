@@ -52,9 +52,9 @@ class TestRefreshOne:
     def test_returns_payload_with_expected_keys(self, patched_io):
         payload = refresh_data.refresh_one("BTC/USDT")
         assert payload is not None
-        for key in ("metrics", "profile", "scoreInfo", "direction", "range",
-                    "mode", "gridCount", "duration", "viability", "signalInfo",
-                    "mtf", "regime", "matrix"):
+        for key in ("metrics", "profile", "gridHeadline", "scoreInfo",
+                    "direction", "range", "mode", "gridCount", "duration",
+                    "viability", "signalInfo", "mtf", "regime", "matrix"):
             assert key in payload
 
     def test_payload_includes_daily_weekly_closes(self, patched_io):
@@ -66,9 +66,12 @@ class TestRefreshOne:
 
     def test_upserts_cache_with_consistent_values(self, patched_io):
         payload = refresh_data.refresh_one("ETH/USDT")
-        # The values written to the cache must match the returned payload
+        # The values written to the cache must match the returned payload.
+        # The cached `score` column is now the matrix GRID_NEUTRAL headline (0–100),
+        # which equals payload["gridHeadline"]["score"] and matrix GRID_NEUTRAL.
         assert patched_io["symbol"] == "ETH/USDT"
-        assert patched_io["score"] == payload["scoreInfo"]["score"]
+        assert patched_io["score"] == payload["gridHeadline"]["score"]
+        assert patched_io["score"] == payload["matrix"]["scores"]["GRID_NEUTRAL"]
         assert patched_io["direction"] == payload["direction"]["type"]
         assert patched_io["price"] == payload["metrics"]["currClose"]
 

@@ -391,6 +391,7 @@ def render_bot_monitor(selected: list[str], payloads: dict[str, dict]) -> None:
         metrics = {**metrics}
         metrics["_grid_score"] = p.get("scoreInfo", {}).get("score", 0.0)
         metrics["_setup_score"] = (signal_info or {}).get("score", 0.0)
+        metrics["_matrix_scores"] = (p.get("matrix") or {}).get("scores")  # 0–100 headline source for restart direction
 
         if not metrics.get("currClose"):
             continue
