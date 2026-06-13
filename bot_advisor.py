@@ -177,16 +177,15 @@ def _generate_recommendation(pos: dict, trend: dict, profit: dict, duration: dic
     }
 
 
-def _build_restart(symbol: str, metrics: dict, grid_score: float) -> dict | None:
+def _build_restart(symbol: str, metrics: dict, matrix_scores: dict | None) -> dict | None:
     """Build a restart recommendation with fresh ATR-derived range."""
     price = metrics.get("currClose", 0.0)
     atr_pct = metrics.get("atrPct", 0.0)
-    structure = metrics.get("structure4h", "Neutral")
     if price <= 0 or atr_pct <= 0:
         return None
 
     profile = get_ticker_grid_profile(symbol)
-    direction = select_grid_direction(structure, grid_score)
+    direction = select_grid_direction(matrix_scores)
     rng = calc_range_from_atr(price, atr_pct, profile["rangeMultiplier"], direction["type"])
     mode = select_grid_mode(rng["rangeWidthPct"])
     grids = calc_recommended_grid_count(rng["rangeHigh"], rng["rangeLow"])
@@ -219,8 +218,7 @@ def assess_bot_health(bot: dict, metrics: dict, signal_info: dict | None = None,
     # Restart recommendation when action is CLOSE or TAKE_PROFIT
     restart = None
     if rec["action"] in ("CLOSE_NOW", "TAKE_PROFIT", "REVIEW"):
-        grid_score = metrics.get("_grid_score", 0.0)
-        restart = _build_restart(symbol, metrics, grid_score)
+        restart = _build_restart(symbol, metrics, metrics.get("_matrix_scores"))
 
     return {
         "position": pos,

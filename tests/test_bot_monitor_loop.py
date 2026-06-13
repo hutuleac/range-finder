@@ -52,6 +52,8 @@ def _fake_payload():
         },
         "scoreInfo": {"score": 7.5},
         "signalInfo": {"score": 2.0},
+        "matrix": {"scores": {"GRID_NEUTRAL": 72.0, "GRID_LONG": 80.0,
+                              "GRID_SHORT": 50.0, "DIRECTIONAL": 40.0}},
     }
 
 
