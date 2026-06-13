@@ -19,6 +19,10 @@ CFG: dict = {
     "KLINES_14D": 84,
     "KLINES_30D": 180,
     "FLOW_LIMIT": 24,
+    # Multi-timeframe spine (Phase 1) — daily/weekly closes for the regime layer.
+    # Daily 120 covers Hurst(90) + ER(10) + DFA with buffer; weekly 60 covers Hurst-weekly(52).
+    "KLINES_DAILY": 120,
+    "KLINES_WEEKLY": 60,
 
     # Indicators
     "RSI_PERIOD": 14,
