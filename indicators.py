@@ -13,7 +13,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from config import CFG
+from config import CFG, GRID_CONFIG
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -250,6 +250,26 @@ def calc_adx(df: pd.DataFrame, period: int = 14) -> dict:
     return {"adx": adx, "plusDI": last["pDI"], "minusDI": last["mDI"]}
 
 
+def calc_ranging_streak(df: pd.DataFrame, adx_threshold: float = 25.0, period: int = 14) -> int:
+    """Count consecutive trailing 4H bars where ADX < adx_threshold (ranging regime active).
+
+    Returns the streak length (0 = currently trending). A long streak (e.g. 12+ bars = 2 days)
+    means the range has been stable — more reliable entry than a fresh compression."""
+    if len(df) < period + 2:
+        return 0
+    adx_series = []
+    for i in range(period, len(df)):
+        sub = df.iloc[: i + 1]
+        adx_series.append(calc_adx(sub, period)["adx"])
+    streak = 0
+    for v in reversed(adx_series):
+        if v < adx_threshold:
+            streak += 1
+        else:
+            break
+    return streak
+
+
 def calc_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
     if len(df) < slow + signal:
         return {"macd": 0.0, "signal": 0.0, "histogram": 0.0, "trend": "neutral"}
@@ -484,6 +504,9 @@ def get_advanced_metrics(
     # Volume 5d for grid score (sum of 5d volume)
     volume5d = float(df5d["Volume"].sum()) if not df5d.empty else 0.0
 
+    # Ranging persistence: consecutive bars where ADX stayed below threshold
+    ranging_streak = calc_ranging_streak(df4h_main, adx_threshold=GRID_CONFIG["VIABILITY"]["ADX_BLOCK"])
+
     return {
         "currClose": last_close,
         "rsi": rsi, "atr": atr, "atrPct": atr_pct,
@@ -501,4 +524,5 @@ def get_advanced_metrics(
         "obv": obv_data, "fib": fib_data, "change24h": change_24h,
         "donchianShort": donchian_s, "donchianLong": donchian_l, "squeeze": squeeze,
         "funding": funding, "volume5d": volume5d,
+        "rangingStreak": ranging_streak,
     }

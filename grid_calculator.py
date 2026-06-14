@@ -377,6 +377,21 @@ def calc_grid_score(m: dict | None) -> dict:
         sq_detail = f"BB {sq_bbw:.1f}% (<5%) · DC/ATR {sq_ratio:.2f} (<0.70) — prime grid window"
         components.append({"label": "Squeeze", "score": 0.5, "max": 0.5, "detail": sq_detail})
 
+    # Ranging persistence bonus — reward stable, long-lived ranges
+    streak = m.get("rangingStreak", 0)
+    if streak >= 24:   # 4+ days of confirmed ranging (24 × 4H bars)
+        persistence_score = 1.0
+        persistence_detail = f"Ranging {streak} bars ({streak // 6:.0f}d) — strong persistence"
+    elif streak >= 12:  # 2+ days of confirmed ranging
+        persistence_score = 0.5
+        persistence_detail = f"Ranging {streak} bars ({streak // 6:.0f}d) — moderate persistence"
+    else:
+        persistence_score = 0.0
+        persistence_detail = f"Ranging {streak} bars — fresh range, verify stability"
+    if persistence_score > 0:
+        score = min(10.0, score + persistence_score)
+        components.append({"label": "Range Persistence", "score": persistence_score, "max": 1.0, "detail": persistence_detail})
+
     rounded = round(score * 10) / 10
     if rounded >= 8:
         label = "STRONG SETUP"
