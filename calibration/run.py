@@ -88,11 +88,83 @@ def load_klines(symbol: str, timeframe: str, limit: int, use_network: bool) -> l
     return raw
 
 
+def load_funding_history(symbol: str, use_network: bool) -> list[dict]:
+    """Fetch historical 8h funding rates from Binance futures (public endpoint).
+
+    Returns [{timestamp_ms, rate_pct}] sorted ascending. rate_pct = fundingRate*100
+    to match data_fetcher.fetch_funding scale. Returns [] on failure or offline."""
+    safe = symbol.replace("/", "_")
+    path = _cache_path(symbol, "funding")
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except (ValueError, OSError) as e:
+            log.warning("funding cache read failed %s: %s", path.name, e)
+    if not use_network:
+        log.warning("no funding cache for %s and --no-network set", symbol)
+        return []
+    try:
+        import ccxt
+        ex = ccxt.binance({"options": {"defaultType": "future"}})
+        raw = ex.fetch_funding_rate_history(symbol, limit=500)
+        result = [
+            {"timestamp_ms": int(r["timestamp"]),
+             "rate_pct": float(r["fundingRate"]) * 100.0}
+            for r in raw
+            if r.get("timestamp") is not None and r.get("fundingRate") is not None
+        ]
+        result.sort(key=lambda x: x["timestamp_ms"])
+        if result:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(result))
+            time.sleep(FETCH_SLEEP_S)
+        return result
+    except Exception as e:  # noqa: BLE001
+        log.warning("funding fetch failed %s: %s", symbol, e)
+        return []
+
+
+def load_oi_history(symbol: str, use_network: bool) -> list[dict]:
+    """Fetch daily OI history from Binance futures (public endpoint).
+
+    Returns [{timestamp_ms, oi_value}] sorted ascending. Returns [] on failure."""
+    safe = symbol.replace("/", "_")  # noqa: F841 — referenced via _cache_path
+    path = _cache_path(symbol, "oi_daily")
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except (ValueError, OSError) as e:
+            log.warning("OI cache read failed %s: %s", path.name, e)
+    if not use_network:
+        log.warning("no OI cache for %s and --no-network set", symbol)
+        return []
+    try:
+        import ccxt
+        ex = ccxt.binance({"options": {"defaultType": "future"}})
+        raw = ex.fetch_open_interest_history(symbol, "1d", limit=500)
+        result = [
+            {"timestamp_ms": int(r["timestamp"]),
+             "oi_value": float(r["openInterestAmount"])}
+            for r in raw
+            if r.get("timestamp") is not None and r.get("openInterestAmount") is not None
+        ]
+        result.sort(key=lambda x: x["timestamp_ms"])
+        if result:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(result))
+            time.sleep(FETCH_SLEEP_S)
+        return result
+    except Exception as e:  # noqa: BLE001
+        log.warning("OI fetch failed %s: %s", symbol, e)
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────
 #  Per-pair walk
 # ─────────────────────────────────────────────────────────────────────
 def walk_pair(symbol: str, horizon: int, max_steps: int, use_network: bool) -> tuple[list, list]:
     """Return (feature_rows, outcome_rows) for one pair, or ([],[]) on no data."""
+    from indicators import calc_cvd  # lazy — avoids circular import issues in tests
     raw_daily = load_klines(symbol, "1d", CFG["KLINES_DAILY"], use_network)
     raw_4h = load_klines(symbol, "4h", CFG["KLINES_MAIN"], use_network)
     df_daily = parse_klines(raw_daily)
@@ -106,6 +178,15 @@ def walk_pair(symbol: str, horizon: int, max_steps: int, use_network: bool) -> t
     last_idx = len(daily_closes) - horizon - 1
     start_idx = max(WARMUP, last_idx - max_steps + 1)
 
+    # Build live signal lookup for the walk window (one fetch per pair, not per step)
+    walk_timestamps = [daily_times[idx] for idx in range(start_idx, last_idx + 1)
+                       if daily_times[idx] is not None]
+    funding_hist = load_funding_history(symbol, use_network)
+    oi_hist = load_oi_history(symbol, use_network)
+    live_lookup = F.build_live_signal_lookup(
+        funding_hist, oi_hist, df_4h, walk_timestamps, calc_cvd_fn=calc_cvd,
+    )
+
     feats, outs = [], []
     for idx in range(start_idx, last_idx + 1):
         t_ms = daily_times[idx]
@@ -115,7 +196,11 @@ def walk_pair(symbol: str, horizon: int, max_steps: int, use_network: bool) -> t
             visible_4h, calc_rsi, calc_atr, calc_atr_pct,
             calc_adx, calc_bb, calc_market_structure, CFG["STRUCT_LOOKBACK_4H"],
         )
-        scores = F.reconstruct_matrix_scores(price_metrics, reg["_regime"], calc_matrix)
+        live_signals = live_lookup.get(t_ms) if t_ms is not None else None
+        scores = F.reconstruct_matrix_scores(
+            price_metrics, reg["_regime"], calc_matrix, live_signals=live_signals,
+        )
+        has_live = bool((live_signals or {}).get("has_live_signals", False))
         feats.append({
             "symbol": symbol, "idx": idx,
             "er_value": reg["er_value"], "er_regime": reg["er_regime"],
@@ -123,6 +208,7 @@ def walk_pair(symbol: str, horizon: int, max_steps: int, use_network: bool) -> t
             "combined_regime": reg["combined_regime"],
             "grid_neutral": scores.get("GRID_NEUTRAL"),
             "directional": scores.get("DIRECTIONAL"),
+            "has_live_signals": has_live,
         })
         outs.append({
             "fwd_trendiness": F.forward_trendiness(daily_closes, idx, horizon),
@@ -175,24 +261,37 @@ def render_report(sep: dict, per_pair: dict, meta: dict) -> str:
     A("")
     A(f"- **Run mode:** {meta['mode']} · generated {meta['generated']}")
     A(f"- **Pairs:** {', '.join(meta['pairs'])}")
+    n_live = meta.get("n_live_steps", 0)
+    n_total = sep["n_steps"]
+    pct_live = f"{100 * n_live // n_total}%" if n_total > 0 else "n/a"
     A(f"- **Forward horizon:** {meta['horizon']} daily bars · "
-      f"**max steps/pair:** {meta['max_steps']} · **total walk steps:** {sep['n_steps']}")
+      f"**max steps/pair:** {meta['max_steps']} · **total walk steps:** {n_total} "
+      f"· **steps with live signals:** {n_live} ({pct_live})")
     A("- For each daily index `t` (after a 95-bar warm-up for Hurst+ER), we "
-      "reconstruct `build_regime` and the price-derived slice of `calc_matrix` "
-      "using ONLY data ≤ `t` (no lookahead), then measure forward outcomes over "
-      "bars `t+1..t+N`.")
+      "reconstruct `build_regime` and `calc_matrix` using ONLY data ≤ `t` (no "
+      "lookahead), then measure forward outcomes over bars `t+1..t+N`.")
+    A("- **Reconstructed live signals (where history available):** funding "
+      "(Binance futures ~66 days, 8h intervals), oiChange (Binance ~31 days, "
+      "1d interval), cvd5d/14d/30d (computed from cached 4H klines, full depth). "
+      "`flow` stays neutral — not available historically.")
     A("- **Forward outcomes:** *trendiness* (ER-style net/path of the next N bars; "
       "low = good grid window), *abs return*, *realized vol*.")
     A("- **Stats are numpy-only:** Pearson r, group means, rank-AUC "
       "(Mann-Whitney U). No scipy/sklearn.")
     A("")
-    A("> **Honesty caveat — matrix inputs.** `calc_matrix` consumes live-only "
-      "signals (funding, OI change, flow, CVD) that CANNOT be reconstructed from "
-      "historical OHLCV. They are held at their neutral default during this "
-      "replay, so the reported GRID_NEUTRAL / DIRECTIONAL scores reflect the "
-      "**price + regime** structure only. Treat matrix findings as a partial "
-      "check; the regime layer (ER × Hurst) is the fully-reconstructable, "
-      "primary target.")
+    if n_live > 0:
+        A(f"> **Live signal coverage:** {n_live}/{n_total} steps ({pct_live}) had "
+          f"real funding + OI data. Steps outside the Binance history window used "
+          f"neutral placeholders for those two signals (CVD always reconstructed "
+          f"from cached klines).")
+    else:
+        A("> **Honesty caveat — matrix inputs.** `calc_matrix` consumes live-only "
+          "signals (funding, OI change, flow, CVD) that CANNOT be reconstructed "
+          "from historical OHLCV. They are held at their neutral default during "
+          "this replay, so the reported GRID_NEUTRAL / DIRECTIONAL scores reflect "
+          "the **price + regime** structure only. Treat matrix findings as a "
+          "partial check; the regime layer (ER × Hurst) is the "
+          "fully-reconstructable, primary target.")
     A("")
     A("## Per-signal separation results")
     A("")
@@ -215,14 +314,24 @@ def render_report(sep: dict, per_pair: dict, meta: dict) -> str:
             g = rg[regime]
             A(f"| {regime} | {_fmt(g['mean'])} | {_fmt(g['median'])} | {g['n']} |")
     A("")
-    A("### 2. Matrix scores (price+regime only — partial)")
+    n_live = meta.get("n_live_steps", 0)
+    n_total = sep["n_steps"]
+    matrix_subtitle = (
+        f"(funding+OI+CVD reconstructed for {n_live}/{n_total} steps)"
+        if n_live > 0 else "(price+regime only — partial)"
+    )
+    A(f"### 2. Matrix scores {matrix_subtitle}")
     A("")
-    A("| Signal | Statistic | Value | Expectation | Verdict |")
-    A("|---|---|---|---|---|")
-    A(f"| GRID_NEUTRAL → low fwd trendiness | rank-AUC | {_fmt(sep['grid_neutral_auc'])} | "
-      f">0.5 | {auc_verdict(sep['grid_neutral_auc'])} |")
-    A(f"| DIRECTIONAL → high fwd abs return | rank-AUC | {_fmt(sep['directional_auc'])} | "
-      f">0.5 | {auc_verdict(sep['directional_auc'])} |")
+    A("| Signal | Steps | Statistic | Value | Expectation | Verdict |")
+    A("|---|---|---|---|---|---|")
+    A(f"| GRID_NEUTRAL → low fwd trendiness | all {n_total} | rank-AUC | "
+      f"{_fmt(sep['grid_neutral_auc'])} | >0.5 | {auc_verdict(sep['grid_neutral_auc'])} |")
+    live_auc = sep.get("grid_neutral_auc_live")
+    live_label = f"live-signal {n_live}" if n_live else "live-signal (n/a)"
+    A(f"| GRID_NEUTRAL → low fwd trendiness | {live_label} | rank-AUC | "
+      f"{_fmt(live_auc)} | >0.5 | {auc_verdict(live_auc)} |")
+    A(f"| DIRECTIONAL → high fwd abs return | all {n_total} | rank-AUC | "
+      f"{_fmt(sep['directional_auc'])} | >0.5 | {auc_verdict(sep['directional_auc'])} |")
     A("")
     A("### Per-pair step counts")
     A("")
@@ -254,8 +363,15 @@ def render_report(sep: dict, per_pair: dict, meta: dict) -> str:
       f"{sep['n_steps']} steps are NOT independent — effective sample size is "
       "much smaller. Read every r/AUC as a flag to investigate on a larger, "
       "non-overlapping run, not as a result.")
-    A("- Matrix live-only inputs held neutral (see honesty caveat) — matrix "
-      "findings are partial.")
+    n_live_c = meta.get("n_live_steps", 0)
+    n_total_c = sep["n_steps"]
+    if n_live_c == 0:
+        A("- Matrix live-only inputs held neutral (see methodology) — matrix "
+          "findings are partial.")
+    else:
+        A(f"- {n_live_c}/{n_total_c} steps used real funding+OI+CVD; "
+          f"remaining steps used neutral placeholders. `flow` stays neutral "
+          f"throughout (not available historically).")
     A("- Forward trendiness is a *proxy* for grid suitability, not realized grid "
       "P&L. A true validation would simulate grid fills.")
     A("- No multiple-testing correction; treat any single r/AUC as a flag to "
@@ -323,6 +439,25 @@ def _findings_block(sep: dict) -> str:
         out.append("- **DIRECTIONAL score is inverted** vs forward move on this "
                    "sample — worth checking the ADX/ER/Hurst directional "
                    "normalisations.")
+    live_auc = sep.get("grid_neutral_auc_live")
+    n_live = sep.get("n_live_steps", 0)
+    if live_auc is not None and n_live >= 5:
+        if live_auc > 0.6:
+            out.append(f"- **GRID_NEUTRAL with live signals separates well "
+                       f"(AUC={live_auc:.2f}, n={n_live} steps).** Score predicts "
+                       "good grid windows when funding+OI+CVD are real — the live "
+                       "signals carry meaningful edge.")
+        elif abs(live_auc - 0.5) < 0.1:
+            out.append(f"- **GRID_NEUTRAL with live signals ≈ coin-flip "
+                       f"(AUC={live_auc:.2f}, n={n_live}).** Adding real "
+                       "funding/OI/CVD did not recover separation — weighting may "
+                       "need adjustment.")
+        elif live_auc < 0.4:
+            out.append(f"- **GRID_NEUTRAL with live signals STILL INVERTED "
+                       f"(AUC={live_auc:.2f}, n={n_live}).** Real signals made it "
+                       "no better — weighting direction may be wrong, not just the "
+                       "neutral placeholders.")
+
     if not out:
         out.append("- No strong mis-set signal detected on this bounded sample. "
                    "Re-run across more pairs/history before drawing conclusions.")
@@ -400,19 +535,21 @@ def run(pairs: list[str], horizon: int, max_steps: int, use_network: bool) -> di
         all_feats.extend(feats)
         all_outs.extend(outs)
 
-    sep = F.summarize_separation(all_feats, all_outs)
+    live_mask = [bool(r.get("has_live_signals", False)) for r in all_feats]
+    sep = F.summarize_separation(all_feats, all_outs, live_mask=live_mask)
     meta = {
         "mode": "live+cache" if use_network else "cache-only",
         "generated": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
         "pairs": pairs,
         "horizon": horizon,
         "max_steps": max_steps,
+        "n_live_steps": sep.get("n_live_steps", 0),
     }
     report = render_report(sep, per_pair, meta)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(report)
-    log.info("wrote %s (%d walk steps across %d pairs)",
-             REPORT_PATH, sep["n_steps"], len(pairs))
+    log.info("wrote %s (%d walk steps, %d with live signals, across %d pairs)",
+             REPORT_PATH, sep["n_steps"], sep.get("n_live_steps", 0), len(pairs))
     return sep
 
 

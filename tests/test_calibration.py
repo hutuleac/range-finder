@@ -436,3 +436,226 @@ class TestReportRendering:
         assert R._fmt(None) == "n/a"
         assert R._fmt(0.12345) == "0.123"
         assert R._fmt("X") == "X"
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  New: calc_cvd_at
+# ─────────────────────────────────────────────────────────────────────
+class TestCalcCvdAt:
+    def test_returns_zero_for_empty_frame(self):
+        df = pd.DataFrame(columns=["Time", "Open", "High", "Low", "Close", "Volume", "BuyVol"])
+        result = F.calc_cvd_at(df, t_ms=1_000_000, window_days=5, calc_cvd_fn=lambda _df: 0.0)
+        assert result == 0.0
+
+    def test_slices_by_time_window(self):
+        ms_per_day = 86_400_000
+        times = [i * ms_per_day for i in range(10)]
+        df = pd.DataFrame({
+            "Time": times,
+            "Open": [1.0] * 10, "High": [1.0] * 10,
+            "Low": [1.0] * 10, "Close": [1.0] * 10,
+            "Volume": [1.0] * 10, "BuyVol": [1.0] * 10,
+        })
+        seen = []
+        def capture_cvd(sub):
+            seen.append(len(sub))
+            return float(len(sub))
+        result = F.calc_cvd_at(df, t_ms=9 * ms_per_day, window_days=5, calc_cvd_fn=capture_cvd)
+        # window (4*ms, 9*ms] → rows 5,6,7,8,9 → 5 rows
+        assert seen[0] == 5
+        assert result == 5.0
+
+    def test_empty_slice_returns_zero(self):
+        ms_per_day = 86_400_000
+        df = pd.DataFrame({
+            "Time": [100 * ms_per_day],
+            "Open": [1.0], "High": [1.0], "Low": [1.0],
+            "Close": [1.0], "Volume": [1.0], "BuyVol": [1.0],
+        })
+        called = []
+        result = F.calc_cvd_at(df, t_ms=1 * ms_per_day, window_days=5,
+                                calc_cvd_fn=lambda _df: called.append(1) or 99.0)
+        assert result == 0.0
+        assert called == []
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  New: build_live_signal_lookup
+# ─────────────────────────────────────────────────────────────────────
+class TestBuildLiveSignalLookup:
+    def _make_4h_df(self, n_rows=100, start_ms=0):
+        ms_per_4h = 4 * 3_600_000
+        times = [start_ms + i * ms_per_4h for i in range(n_rows)]
+        return pd.DataFrame({
+            "Time": times, "Open": [1.0]*n_rows, "High": [1.0]*n_rows,
+            "Low": [1.0]*n_rows, "Close": [1.0]*n_rows,
+            "Volume": [100.0]*n_rows, "BuyVol": [60.0]*n_rows,
+        })
+
+    def test_empty_histories_returns_empty(self):
+        result = F.build_live_signal_lookup(
+            [], [], pd.DataFrame(), [1_000_000],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert result == {}
+
+    def test_no_daily_timestamps_returns_empty(self):
+        result = F.build_live_signal_lookup(
+            [{"timestamp_ms": 1000, "rate_pct": 0.01}],
+            [{"timestamp_ms": 1000, "oi_value": 1000.0}],
+            pd.DataFrame(), [],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert result == {}
+
+    def test_has_live_signals_true_when_both_funding_and_oi_present(self):
+        ms_per_day = 86_400_000
+        t_ms = 10 * ms_per_day
+        funding = [{"timestamp_ms": t_ms - 3600, "rate_pct": 0.05}]
+        oi = [
+            {"timestamp_ms": t_ms - ms_per_day, "oi_value": 1000.0},
+            {"timestamp_ms": t_ms, "oi_value": 1100.0},
+        ]
+        result = F.build_live_signal_lookup(
+            funding, oi, pd.DataFrame(), [t_ms],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert t_ms in result
+        assert result[t_ms]["has_live_signals"] is True
+
+    def test_has_live_signals_false_when_funding_missing(self):
+        ms_per_day = 86_400_000
+        t_ms = 10 * ms_per_day
+        oi = [{"timestamp_ms": t_ms, "oi_value": 1000.0}]
+        result = F.build_live_signal_lookup(
+            [], oi, pd.DataFrame(), [t_ms],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert result[t_ms]["has_live_signals"] is False
+
+    def test_funding_rate_uses_most_recent_before_t_ms(self):
+        ms_per_day = 86_400_000
+        t_ms = 5 * ms_per_day
+        funding = [
+            {"timestamp_ms": t_ms - 28800000, "rate_pct": 0.10},
+            {"timestamp_ms": t_ms - 3600000, "rate_pct": 0.25},
+        ]
+        result = F.build_live_signal_lookup(
+            funding, [], pd.DataFrame(), [t_ms],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert result[t_ms]["funding"] == pytest.approx(0.25)
+
+    def test_oi_change_pct_computed_day_over_day(self):
+        ms_per_day = 86_400_000
+        t_ms = 2 * ms_per_day
+        oi = [
+            {"timestamp_ms": ms_per_day, "oi_value": 1000.0},
+            {"timestamp_ms": 2 * ms_per_day, "oi_value": 1100.0},
+        ]
+        result = F.build_live_signal_lookup(
+            [], oi, pd.DataFrame(), [t_ms],
+            calc_cvd_fn=lambda _df: 0.0,
+        )
+        assert result[t_ms]["oiChange"] == pytest.approx(10.0)
+
+    def test_cvd_values_come_from_calc_cvd_fn(self):
+        ms_per_day = 86_400_000
+        t_ms = 5 * ms_per_day
+        df = self._make_4h_df(n_rows=200, start_ms=0)
+        calls = []
+        def tracking_cvd(sub):
+            calls.append(len(sub))
+            return 42.0
+        result = F.build_live_signal_lookup(
+            [], [], df, [t_ms], calc_cvd_fn=tracking_cvd,
+        )
+        assert len(calls) == 3  # cvd5d, cvd14d, cvd30d
+        assert result[t_ms]["cvd5d"] == 42.0
+        assert result[t_ms]["cvd14d"] == 42.0
+        assert result[t_ms]["cvd30d"] == 42.0
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  New: reconstruct_matrix_scores with live_signals
+# ─────────────────────────────────────────────────────────────────────
+class TestReconstructMatrixScoresLive:
+    def _make_price_metrics(self):
+        return {
+            "adx": {"adx": 20.0},
+            "bbBw": 3.0,
+            "atrPct": 1.0,
+            "rsi": 50.0,
+            "structure4h": "Neutral",
+        }
+
+    def test_live_signals_override_neutral(self):
+        from matrix import calc_matrix
+        price = self._make_price_metrics()
+        score_neutral = F.reconstruct_matrix_scores(price, {}, calc_matrix)
+        live = {"funding": -0.5, "oiChange": -10.0, "cvd5d": -500.0,
+                "cvd14d": -500.0, "cvd30d": -500.0}
+        score_live = F.reconstruct_matrix_scores(price, {}, calc_matrix, live_signals=live)
+        assert score_neutral != score_live
+
+    def test_has_live_signals_key_is_stripped(self):
+        from matrix import calc_matrix
+        price = self._make_price_metrics()
+        live = {"funding": 0.0, "oiChange": 0.0, "cvd5d": 0.0,
+                "cvd14d": 0.0, "cvd30d": 0.0, "has_live_signals": True}
+        result = F.reconstruct_matrix_scores(price, {}, calc_matrix, live_signals=live)
+        assert "GRID_NEUTRAL" in result
+
+    def test_none_live_signals_behaves_as_before(self):
+        from matrix import calc_matrix
+        price = self._make_price_metrics()
+        score_no_arg = F.reconstruct_matrix_scores(price, {}, calc_matrix)
+        score_none = F.reconstruct_matrix_scores(price, {}, calc_matrix, live_signals=None)
+        assert score_no_arg == score_none
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  New: summarize_separation with live_mask
+# ─────────────────────────────────────────────────────────────────────
+class TestSummarizeSeparationLiveMask:
+    def _make_rows(self, n=20):
+        feats = [
+            {
+                "er_value": 0.3 + 0.02 * i,
+                "er_regime": "RANGING" if i % 3 == 0 else "TRANSITIONAL",
+                "hurst": 0.45,
+                "grid_neutral": float(i),
+                "directional": float(20 - i),
+            }
+            for i in range(n)
+        ]
+        outs = [
+            {
+                "fwd_trendiness": 1.0 - i / n,
+                "fwd_abs_return": float(i) / n,
+                "fwd_realized_vol": 0.01,
+            }
+            for i in range(n)
+        ]
+        return feats, outs
+
+    def test_live_mask_produces_live_auc_key(self):
+        feats, outs = self._make_rows(20)
+        mask = [i % 2 == 0 for i in range(20)]
+        sep = F.summarize_separation(feats, outs, live_mask=mask)
+        assert "grid_neutral_auc_live" in sep
+        assert "n_live_steps" in sep
+        assert sep["n_live_steps"] == 10
+
+    def test_no_live_mask_gives_none_live_auc(self):
+        feats, outs = self._make_rows(20)
+        sep = F.summarize_separation(feats, outs)
+        assert sep.get("grid_neutral_auc_live") is None
+        assert sep.get("n_live_steps") == 0
+
+    def test_all_false_mask_gives_none_live_auc(self):
+        feats, outs = self._make_rows(10)
+        mask = [False] * 10
+        sep = F.summarize_separation(feats, outs, live_mask=mask)
+        assert sep["grid_neutral_auc_live"] is None
+        assert sep["n_live_steps"] == 0

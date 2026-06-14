@@ -25,6 +25,7 @@ columns we report are price+regime driven only. The report labels this loudly.
 """
 from __future__ import annotations
 
+import bisect
 from typing import Callable
 
 import numpy as np
@@ -40,6 +41,85 @@ LIVE_ONLY_NEUTRAL: dict[str, float] = {
     "cvd14d": 0.0,
     "cvd30d": 0.0,
 }
+
+_MS_PER_DAY = 86_400_000
+
+
+def calc_cvd_at(
+    df_4h: pd.DataFrame,
+    t_ms: int,
+    window_days: int,
+    calc_cvd_fn: Callable,
+) -> float:
+    """CVD of the trailing `window_days` of 4H bars ending at/before `t_ms`.
+
+    Pure: takes an injected calc_cvd_fn so tests can stub it without importing
+    indicators. Returns 0.0 when the slice is empty (same as calc_cvd default)."""
+    if df_4h.empty or "Time" not in df_4h.columns:
+        return 0.0
+    cutoff = t_ms - window_days * _MS_PER_DAY
+    window = df_4h[(df_4h["Time"] > cutoff) & (df_4h["Time"] <= t_ms)]
+    if window.empty:
+        return 0.0
+    return calc_cvd_fn(window)
+
+
+def build_live_signal_lookup(
+    funding_history: list[dict],
+    oi_history: list[dict],
+    df_4h: pd.DataFrame,
+    daily_timestamps_ms: list[int],
+    calc_cvd_fn: Callable,
+) -> dict[int, dict]:
+    """Build a {daily_ms: live_signals} lookup for each walk-step timestamp.
+
+    funding_history: [{timestamp_ms, rate_pct}] sorted ascending — use most-recent
+        entry at/before t_ms. Scale matches data_fetcher.fetch_funding (pct).
+    oi_history: [{timestamp_ms, oi_value}] sorted ascending by day — day-over-day
+        change in percent.
+    df_4h: 4H OHLCV frame with a 'Time' column in epoch-ms.
+    daily_timestamps_ms: the walk-step timestamps to index.
+    calc_cvd_fn: injected so tests can stub without importing indicators.
+
+    Returns {} when daily_timestamps_ms is empty or all histories are empty."""
+    if not daily_timestamps_ms:
+        return {}
+    if not funding_history and not oi_history and df_4h.empty:
+        return {}
+
+    fund_ts = [e["timestamp_ms"] for e in funding_history]
+    fund_rates = [e["rate_pct"] for e in funding_history]
+    oi_ts = [e["timestamp_ms"] for e in oi_history]
+    oi_vals = [e["oi_value"] for e in oi_history]
+
+    lookup: dict[int, dict] = {}
+    for t_ms in daily_timestamps_ms:
+        funding_val: float | None = None
+        if fund_ts:
+            i = bisect.bisect_right(fund_ts, t_ms) - 1
+            if i >= 0:
+                funding_val = fund_rates[i]
+
+        oi_change: float | None = None
+        if oi_ts:
+            i = bisect.bisect_right(oi_ts, t_ms) - 1
+            if i >= 1:
+                oi_now = oi_vals[i]
+                oi_prev = oi_vals[i - 1]
+                if oi_prev > 0:
+                    oi_change = (oi_now - oi_prev) / oi_prev * 100.0
+
+        has_live = funding_val is not None and oi_change is not None
+
+        lookup[t_ms] = {
+            "funding": funding_val if funding_val is not None else 0.0,
+            "oiChange": oi_change if oi_change is not None else 0.0,
+            "cvd5d": calc_cvd_at(df_4h, t_ms, 5, calc_cvd_fn),
+            "cvd14d": calc_cvd_at(df_4h, t_ms, 14, calc_cvd_fn),
+            "cvd30d": calc_cvd_at(df_4h, t_ms, 30, calc_cvd_fn),
+            "has_live_signals": has_live,
+        }
+    return lookup
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -175,15 +255,17 @@ def reconstruct_matrix_scores(
     metrics_price: dict,
     regime: dict,
     calc_matrix: Callable,
+    live_signals: dict | None = None,
 ) -> dict[str, float]:
-    """Run calc_matrix with live-only inputs held neutral.
+    """Run calc_matrix with live signals where available, else neutral.
 
-    metrics_price carries the price-derived metrics reconstructable from OHLCV
-    (adx, bbBw, atrPct, rsi, structure4h). We overlay LIVE_ONLY_NEUTRAL so the
-    matrix's funding/OI/flow/CVD terms contribute their neutral 0.5 — the
-    reported scores are therefore price+regime driven only (flagged in report).
-    """
-    metrics = {**LIVE_ONLY_NEUTRAL, **metrics_price}
+    metrics_price: price-derived metrics (adx, bbBw, atrPct, rsi, structure4h).
+    live_signals: when provided, its keys override LIVE_ONLY_NEUTRAL (funding,
+        oiChange, cvd5d, cvd14d, cvd30d). The 'has_live_signals' bookkeeping key
+        is stripped before merging so calc_matrix never sees it."""
+    overrides = {k: v for k, v in (live_signals or {}).items()
+                 if k != "has_live_signals"}
+    metrics = {**LIVE_ONLY_NEUTRAL, **metrics_price, **overrides}
     out = calc_matrix(metrics, regime)
     return dict(out.get("scores", {}))
 
@@ -288,6 +370,7 @@ def median_split_label(values: list[float]) -> list[int]:
 def summarize_separation(
     feature_rows: list[dict],
     outcome_rows: list[dict],
+    live_mask: list[bool] | None = None,
 ) -> dict:
     """Assemble the headline separation table from aligned feature/outcome rows.
 
@@ -301,8 +384,12 @@ def summarize_separation(
                                RANGING should show LOWER forward trendiness.
       - grid_neutral_auc       (rank-AUC): does a high GRID_NEUTRAL score predict
                                LOW forward trendiness (good grid window)?
+      - grid_neutral_auc_live  (rank-AUC): same, restricted to live_mask==True
+                               steps (funding + OI reconstructed). None if fewer
+                               than 3 live steps.
       - directional_auc        (rank-AUC): does a high DIRECTIONAL score predict
                                HIGH forward abs return?
+      - n_live_steps           int: count of steps where live_mask was True.
     """
     er = [r.get("er_value") for r in feature_rows]
     hurst = [r.get("hurst") for r in feature_rows]
@@ -324,6 +411,23 @@ def summarize_separation(
     else:
         grid_neutral_auc = None
 
+    # Live-only AUC: subset where live_mask is True
+    n_live_steps = 0
+    grid_neutral_auc_live = None
+    if live_mask is not None:
+        live_idx = [i for i, m in enumerate(live_mask) if m]
+        n_live_steps = len(live_idx)
+        if n_live_steps >= 3:
+            gn_live = [gn[i] for i in live_idx]
+            ft_live = [f_trend[i] for i in live_idx]
+            valid_live = [(g, t) for g, t in zip(gn_live, ft_live)
+                         if g is not None and t is not None]
+            if valid_live:
+                g_live = [g for g, _ in valid_live]
+                t_live = [t for _, t in valid_live]
+                low_live_pos = [1 - p for p in median_split_label(t_live)]
+                grid_neutral_auc_live = rank_auc(g_live, low_live_pos)
+
     valid_dir = [(d, a) for d, a in zip(dr, f_absret) if d is not None and a is not None]
     if valid_dir:
         d_scores = [d for d, _ in valid_dir]
@@ -335,9 +439,11 @@ def summarize_separation(
 
     return {
         "n_steps": len(feature_rows),
+        "n_live_steps": n_live_steps,
         "er_vs_trendiness": pearson_r(er, f_trend),
         "hurst_vs_trendiness": pearson_r(hurst, f_trend),
         "ranging_grid_quality": group_means(er_regime, f_trend),
         "grid_neutral_auc": grid_neutral_auc,
+        "grid_neutral_auc_live": grid_neutral_auc_live,
         "directional_auc": directional_auc,
     }
