@@ -433,7 +433,8 @@ def render_symbol(payload: dict, symbol: str) -> None:
     bb_bw = m.get("bbBw", 0.0)
     bb_lb = (m.get("bb") or {}).get("label", "normal")
     str4h = m.get("structure4h", "Neutral")
-    sq    = (m.get("squeeze") or {}).get("squeeze", False)
+    sq     = (m.get("squeeze") or {}).get("squeeze", False)
+    streak = m.get("rangingStreak", 0)
     cvd5  = m.get("cvd5d", 0.0)
     cvd14 = m.get("cvd14d", 0.0)
     cvd30 = m.get("cvd30d", 0.0)
@@ -546,12 +547,22 @@ def render_symbol(payload: dict, symbol: str) -> None:
             f"&thinsp;{value}</span>"
         )
 
-    atr_c  = "#ef4444" if atr_p > 5 else "#fbbf24" if atr_p > 3 else "#94a3b8"
+    atr_c    = "#ef4444" if atr_p > 5 else "#fbbf24" if atr_p > 3 else "#94a3b8"
+    if streak >= 24:
+        streak_color = "#22c55e"
+        streak_label = f"{streak}b ({streak // 6}d) ✓✓"
+    elif streak >= 12:
+        streak_color = "#fbbf24"
+        streak_label = f"{streak}b ({streak // 6}d) ✓"
+    else:
+        streak_color = "#94a3b8"
+        streak_label = f"{streak}b"
     pills  = (
         sig_pill("RSI", f"{rsi:.1f}", rsi_color(rsi))
         + sig_pill("ATR", f"{atr_p:.2f}%", atr_c)
         + sig_pill("BB BW", f"{bb_bw:.2f}%", bb_color)
         + sig_pill("Flow", f"{flow:+.1f}%", flow_color)
+        + sig_pill("Range Streak", streak_label, streak_color)
     )
     st.markdown(
         f"<div style='display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0'>{pills}</div>",
