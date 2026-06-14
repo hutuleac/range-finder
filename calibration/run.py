@@ -46,6 +46,7 @@ log = logging.getLogger("calibration")
 
 CACHE_DIR = Path(__file__).resolve().parent / "_cache"
 REPORT_PATH = Path(__file__).resolve().parents[1] / "docs" / "CALIBRATION_REPORT.md"
+SUMMARY_PATH = Path(__file__).resolve().parents[1] / "docs" / "CALIBRATION_SUMMARY.json"
 
 # Bounded defaults — keep runtime small and rate-limit friendly.
 DEFAULT_PAIR_SAMPLE = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
@@ -548,6 +549,23 @@ def run(pairs: list[str], horizon: int, max_steps: int, use_network: bool) -> di
     report = render_report(sep, per_pair, meta)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(report)
+
+    import json as _json
+    rg = sep.get("ranging_grid_quality", {})
+    summary = {
+        "generated": meta["generated"],
+        "pairs": meta["pairs"],
+        "n_steps": sep["n_steps"],
+        "n_live_steps": sep.get("n_live_steps", 0),
+        "er_vs_trendiness": sep.get("er_vs_trendiness"),
+        "hurst_vs_trendiness": sep.get("hurst_vs_trendiness"),
+        "grid_neutral_auc": sep.get("grid_neutral_auc"),
+        "grid_neutral_auc_live": sep.get("grid_neutral_auc_live"),
+        "directional_auc": sep.get("directional_auc"),
+        "ranging_mean_trendiness": (rg.get("RANGING") or {}).get("mean"),
+        "trending_mean_trendiness": (rg.get("TRENDING") or {}).get("mean"),
+    }
+    SUMMARY_PATH.write_text(_json.dumps(summary, indent=2))
     log.info("wrote %s (%d walk steps, %d with live signals, across %d pairs)",
              REPORT_PATH, sep["n_steps"], sep.get("n_live_steps", 0), len(pairs))
     return sep

@@ -367,7 +367,7 @@ with st.sidebar:
 
     st.divider()
     page = st.radio(
-        "View", ["Range Finder", "Signal Scanner", "Bot Monitor", "Trade Monitor"],
+        "View", ["Range Finder", "Signal Scanner", "Bot Monitor", "Trade Monitor", "Calibration"],
         horizontal=True, label_visibility="collapsed",
     )
 
@@ -783,6 +783,12 @@ if page == "Bot Monitor":
 # ── Trade Monitor page ───────────────────────────────────────────────
 if page == "Trade Monitor":
     render_trade_monitor(selected, payloads)
+    st.stop()
+
+# ── Calibration page ─────────────────────────────────────────────────
+if page == "Calibration":
+    from calibration_page import render_calibration_page
+    render_calibration_page(selected)
     st.stop()
 
 # ── Summary table with conditional styling ─────────────────────────

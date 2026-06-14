@@ -1,0 +1,17 @@
+{
+  "generated": "2026-06-14 13:32:25 UTC",
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT",
+    "SOL/USDT"
+  ],
+  "n_steps": 60,
+  "n_live_steps": 60,
+  "er_vs_trendiness": -0.6433710486944308,
+  "hurst_vs_trendiness": -0.20545984942037893,
+  "grid_neutral_auc": 0.2461111111111111,
+  "grid_neutral_auc_live": 0.2461111111111111,
+  "directional_auc": 0.5988888888888889,
+  "ranging_mean_trendiness": 0.7409963735886126,
+  "trending_mean_trendiness": 0.308641287175073
+}
